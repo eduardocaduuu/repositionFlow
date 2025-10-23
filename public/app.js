@@ -19,20 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
+    console.log('=== INICIALIZANDO APLICAÇÃO ===');
+
     // Event listeners do login
     document.getElementById('loginForm').addEventListener('submit', handleLogin);
 
-    // Event listeners de navegação
-    document.querySelectorAll('.nav-btn:not(.logout-btn)').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const view = e.target.dataset.view;
-            console.log('Botão clicado:', view);
-            if (view) {
-                switchView(view);
-            }
-        });
-    });
+    // Event listeners de navegação - DIRETO em cada botão
+    setupNavigation();
 
     document.querySelector('.logout-btn')?.addEventListener('click', handleLogout);
 
@@ -56,6 +49,53 @@ function initializeApp() {
             closeTaskModal();
         }
     });
+
+    console.log('Inicialização completa');
+}
+
+// Setup de navegação com listeners diretos
+function setupNavigation() {
+    console.log('=== CONFIGURANDO NAVEGAÇÃO ===');
+
+    // Botão Dashboard
+    const btnDashboard = document.querySelector('[data-view="dashboard"]');
+    if (btnDashboard) {
+        btnDashboard.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('>>> CLICK: Dashboard');
+            switchView('dashboard');
+        });
+        console.log('✓ Listener Dashboard adicionado');
+    }
+
+    // Botão Nova Requisição
+    const btnNovaRequisicao = document.getElementById('novaTarefaBtn');
+    if (btnNovaRequisicao) {
+        btnNovaRequisicao.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('>>> CLICK: Nova Requisição');
+            switchView('nova-requisicao');
+        });
+        console.log('✓ Listener Nova Requisição adicionado');
+    } else {
+        console.error('✗ Botão Nova Requisição não encontrado!');
+    }
+
+    // Botão Métricas
+    const btnMetricas = document.getElementById('metricasBtn');
+    if (btnMetricas) {
+        btnMetricas.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('>>> CLICK: Métricas');
+            switchView('metricas');
+        });
+        console.log('✓ Listener Métricas adicionado');
+    } else {
+        console.error('✗ Botão Métricas não encontrado!');
+    }
 }
 
 // Login
@@ -84,16 +124,27 @@ async function handleLogin(e) {
     const novaTarefaBtn = document.getElementById('novaTarefaBtn');
     const metricasBtn = document.getElementById('metricasBtn');
 
+    console.log('Configurando visibilidade para papel:', userRole);
+    console.log('Botão Nova Tarefa encontrado:', novaTarefaBtn);
+    console.log('Botão Métricas encontrado:', metricasBtn);
+
     if (userRole === 'atendente') {
         novaTarefaBtn.classList.remove('hidden');
         metricasBtn.classList.add('hidden');
+        console.log('Atendente: Nova Tarefa visível, Métricas oculto');
     } else if (userRole === 'separador') {
         novaTarefaBtn.classList.add('hidden');
         metricasBtn.classList.add('hidden');
+        console.log('Separador: Ambos ocultos');
     } else {
         novaTarefaBtn.classList.remove('hidden');
         metricasBtn.classList.remove('hidden');
+        console.log('Admin: Ambos visíveis');
     }
+
+    // Verificar classes após mudança
+    console.log('Classes do botão Nova Tarefa:', novaTarefaBtn.className);
+    console.log('Classes do botão Métricas:', metricasBtn.className);
 
     // Mostrar dashboard
     switchView('dashboard');

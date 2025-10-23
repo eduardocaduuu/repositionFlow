@@ -25,8 +25,12 @@ function initializeApp() {
     // Event listeners de navegação
     document.querySelectorAll('.nav-btn:not(.logout-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
+            e.preventDefault();
             const view = e.target.dataset.view;
-            if (view) switchView(view);
+            console.log('Botão clicado:', view);
+            if (view) {
+                switchView(view);
+            }
         });
     });
 
@@ -77,15 +81,18 @@ async function handleLogin(e) {
     document.querySelector('.user-info').textContent = `${userName} (${userRole})`;
 
     // Configurar visibilidade dos botões baseado no papel
+    const novaTarefaBtn = document.getElementById('novaTarefaBtn');
+    const metricasBtn = document.getElementById('metricasBtn');
+
     if (userRole === 'atendente') {
-        document.getElementById('novaTarefaBtn').style.display = 'block';
-        document.getElementById('metricasBtn').style.display = 'none';
+        novaTarefaBtn.classList.remove('hidden');
+        metricasBtn.classList.add('hidden');
     } else if (userRole === 'separador') {
-        document.getElementById('novaTarefaBtn').style.display = 'none';
-        document.getElementById('metricasBtn').style.display = 'none';
+        novaTarefaBtn.classList.add('hidden');
+        metricasBtn.classList.add('hidden');
     } else {
-        document.getElementById('novaTarefaBtn').style.display = 'block';
-        document.getElementById('metricasBtn').style.display = 'block';
+        novaTarefaBtn.classList.remove('hidden');
+        metricasBtn.classList.remove('hidden');
     }
 
     // Mostrar dashboard
@@ -205,11 +212,26 @@ function handleWebSocketMessage(data) {
 
 // Navegação
 function switchView(viewName) {
+    console.log('Mudando para view:', viewName);
+
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
-    document.getElementById(viewName)?.classList.add('active');
-    document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
+    const viewElement = document.getElementById(viewName);
+    const navButton = document.querySelector(`[data-view="${viewName}"]`);
+
+    console.log('View element encontrado:', viewElement);
+    console.log('Nav button encontrado:', navButton);
+
+    if (viewElement) {
+        viewElement.classList.add('active');
+    } else {
+        console.error('View não encontrada:', viewName);
+    }
+
+    if (navButton) {
+        navButton.classList.add('active');
+    }
 
     if (viewName === 'metricas') {
         loadMetrics();

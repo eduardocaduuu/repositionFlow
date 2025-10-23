@@ -90,10 +90,6 @@
                     <input type="text" id="nomeAtendente" required>
                 </div>
                 <div class="form-group">
-                    <label for="nomeLoja">Nome da Loja:</label>
-                    <input type="text" id="nomeLoja" required>
-                </div>
-                <div class="form-group">
                     <label for="prioridade">Prioridade:</label>
                     <select id="prioridade">
                         <option value="Baixa">Baixa</option>
@@ -104,7 +100,16 @@
                 <div class="form-group">
                     <label for="planilha">Planilha Excel (.xlsx):</label>
                     <input type="file" id="planilha" accept=".xlsx,.xls" required>
-                    <small>A planilha deve conter as colunas: SKU, Descrição, Quantidade_requerida</small>
+                    <small>
+                        <strong>Colunas obrigatórias:</strong><br>
+                        • Cod Material (SKU do produto)<br>
+                        • Desc Material (Nome do produto)<br>
+                        • pegar (Quantidade a separar)<br>
+                        <strong>Colunas opcionais de localização:</strong><br>
+                        • Coluna, Estacao, Rack, Linha prod alocado, Coluna prod alocado<br>
+                        <strong>Colunas de estoque (informativas):</strong><br>
+                        • Total físico, Total alocado, Total disponivel
+                    </small>
                 </div>
                 <div id="previewContainer" class="hidden">
                     <h3>Pré-visualização:</h3>

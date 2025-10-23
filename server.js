@@ -67,7 +67,7 @@ function broadcast(message, filterRole = null) {
 
 // Validar colunas obrigatórias da planilha
 function validateExcelColumns(worksheet) {
-  const requiredColumns = ['SKU', 'Descrição', 'Quantidade_requerida'];
+  const requiredColumns = ['Cod Material', 'Desc Material', 'pegar'];
   const headers = [];
 
   const range = xlsx.utils.decode_range(worksheet['!ref']);
@@ -105,17 +105,45 @@ function processExcel(filePath) {
 
   const data = xlsx.utils.sheet_to_json(worksheet);
 
-  // Agrupar por SKU e somar quantidades
+  // Processar items e normalizar colunas
   const itemsMap = new Map();
   data.forEach(row => {
-    const sku = row.SKU?.toString() || '';
-    if (sku) {
-      if (itemsMap.has(sku)) {
-        const existing = itemsMap.get(sku);
-        existing.Quantidade_requerida = (existing.Quantidade_requerida || 0) + (row.Quantidade_requerida || 0);
-      } else {
-        itemsMap.set(sku, { ...row });
-      }
+    const sku = row['Cod Material']?.toString() || '';
+    const quantidadePegar = parseInt(row['pegar']) || 0;
+
+    // Pular linhas sem SKU ou sem quantidade
+    if (!sku || quantidadePegar <= 0) return;
+
+    if (itemsMap.has(sku)) {
+      // Se SKU duplicado, somar quantidades
+      const existing = itemsMap.get(sku);
+      existing.quantidade_pegar += quantidadePegar;
+    } else {
+      // Montar localização completa
+      const localizacao = [
+        row['Coluna'],
+        row['Estacao'],
+        row['Rack'],
+        row['Linha prod alocado'],
+        row['Coluna prod alocado']
+      ].filter(Boolean).join(' - ') || 'Não informado';
+
+      itemsMap.set(sku, {
+        sku: sku,
+        descricao: row['Desc Material'] || 'Sem descrição',
+        quantidade_pegar: quantidadePegar,
+        localizacao: localizacao,
+        // Informações de estoque (opcional)
+        total_fisico: row['Total físico'] || 0,
+        total_alocado: row['Total alocado'] || 0,
+        total_disponivel: row['Total disponivel'] || 0,
+        // Localização detalhada (para referência)
+        coluna: row['Coluna'] || '',
+        estacao: row['Estacao'] || '',
+        rack: row['Rack'] || '',
+        linha_prod_alocado: row['Linha prod alocado'] || '',
+        coluna_prod_alocado: row['Coluna prod alocado'] || ''
+      });
     }
   });
 
@@ -124,7 +152,7 @@ function processExcel(filePath) {
   return {
     success: true,
     items,
-    totalItems: items.reduce((sum, item) => sum + (item.Quantidade_requerida || 0), 0),
+    totalItems: items.reduce((sum, item) => sum + item.quantidade_pegar, 0),
     uniqueSkus: items.length
   };
 }
@@ -175,10 +203,10 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
-    const { nomeAtendente, nomeLoja, prioridade } = req.body;
+    const { nomeAtendente, prioridade } = req.body;
 
-    if (!nomeAtendente || !nomeLoja) {
-      return res.status(400).json({ error: 'Nome do atendente e loja são obrigatórios' });
+    if (!nomeAtendente) {
+      return res.status(400).json({ error: 'Nome do atendente é obrigatório' });
     }
 
     // Processar planilha
@@ -194,7 +222,6 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
     const task = {
       id: uuidv4(),
       nomeAtendente,
-      nomeLoja,
       prioridade: prioridade || 'Média',
       status: 'PENDENTE',
       items: result.items,
@@ -217,7 +244,6 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
       task: {
         id: task.id,
         nomeAtendente: task.nomeAtendente,
-        nomeLoja: task.nomeLoja,
         prioridade: task.prioridade,
         totalItems: task.totalItems,
         uniqueSkus: task.uniqueSkus,

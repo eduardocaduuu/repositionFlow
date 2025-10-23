@@ -10,41 +10,51 @@ A planilha deve ser um arquivo Excel (.xlsx ou .xls) com as seguintes especifica
 
 ### Colunas Obrigatórias
 
-| Nome da Coluna       | Tipo    | Descrição                          | Exemplo    |
-|----------------------|---------|-------------------------------------|------------|
-| SKU                  | Texto   | Código único do produto             | 12345      |
-| Descrição            | Texto   | Nome/descrição do produto           | Produto A  |
-| Quantidade_requerida | Número  | Quantidade a ser separada           | 10         |
+| Nome da Coluna  | Tipo   | Descrição                        | Exemplo              |
+|-----------------|--------|----------------------------------|----------------------|
+| Cod Material    | Texto  | SKU/Código do produto            | 12345                |
+| Desc Material   | Texto  | Nome/descrição do produto        | Detergente 500ml     |
+| pegar           | Número | Quantidade a ser separada        | 24                   |
 
-### Colunas Opcionais
+### Colunas de Localização (Opcionais)
 
-| Nome da Coluna       | Tipo    | Descrição                          | Exemplo       |
-|----------------------|---------|-------------------------------------|---------------|
-| Unidade              | Texto   | Unidade de medida                   | un, kg, cx    |
-| Local_estoque        | Texto   | Localização no estoque              | A-01-02       |
-| Observações          | Texto   | Observações adicionais              | Frágil        |
-| Prioridade           | Texto   | Prioridade do item                  | Alta          |
+| Nome da Coluna        | Tipo   | Descrição                        | Exemplo    |
+|-----------------------|--------|----------------------------------|------------|
+| Coluna                | Texto  | Coluna no estoque                | A          |
+| Estacao               | Texto  | Estação/Área                     | E1         |
+| Rack                  | Texto  | Número do rack                   | R01        |
+| Linha prod alocado    | Texto  | Linha do produto alocado         | L02        |
+| Coluna prod alocado   | Texto  | Coluna do produto alocado        | C03        |
+
+### Colunas de Estoque (Informativas - Opcionais)
+
+| Nome da Coluna   | Tipo   | Descrição                        | Exemplo |
+|------------------|--------|----------------------------------|---------|
+| Total físico     | Número | Quantidade total no estoque      | 100     |
+| Total alocado    | Número | Quantidade já alocada            | 20      |
+| Total disponivel | Número | Quantidade disponível            | 80      |
 
 ## Exemplo Completo
 
-| SKU   | Descrição          | Quantidade_requerida | Unidade | Local_estoque | Observações    |
-|-------|--------------------|---------------------|---------|---------------|----------------|
-| 12345 | Detergente 500ml   | 24                  | un      | A-01-02       | Frágil         |
-| 67890 | Sabão em Pó 1kg    | 12                  | cx      | A-02-05       |                |
-| 11111 | Amaciante 2L       | 6                   | un      | A-01-03       | Produto pesado |
-| 22222 | Esponja            | 100                 | un      | B-03-01       |                |
-| 33333 | Pano de Limpeza    | 50                  | un      | B-03-02       |                |
+| Cod Material | Desc Material    | pegar | Coluna | Estacao | Rack | Linha prod alocado | Coluna prod alocado | Total físico | Total alocado | Total disponivel |
+|--------------|------------------|-------|--------|---------|------|-------------------|-------------------|------------|-------------|----------------|
+| 12345        | Detergente 500ml | 24    | A      | E1      | R01  | L02               | C03               | 100        | 20          | 80             |
+| 67890        | Sabão em Pó 1kg  | 12    | B      | E1      | R02  | L01               | C02               | 50         | 10          | 40             |
+| 11111        | Amaciante 2L     | 6     | A      | E2      | R01  | L03               | C01               | 30         | 5           | 25             |
+| 22222        | Esponja          | 100   | C      | E1      | R03  | L01               | C04               | 200        | 50          | 150            |
+| 33333        | Pano de Limpeza  | 50    | B      | E2      | R02  | L02               | C02               | 150        | 30          | 120            |
 
 ## Regras de Validação
 
 ### Aprovadas
-- ✅ Colunas obrigatórias presentes
+- ✅ Colunas obrigatórias presentes (Cod Material, Desc Material, pegar)
 - ✅ SKUs duplicados (quantidades serão somadas automaticamente)
 - ✅ Colunas opcionais podem estar vazias
 - ✅ Múltiplas linhas de produtos
+- ✅ Linhas com quantidade zero serão ignoradas
 
 ### Rejeitadas
-- ❌ Falta de colunas obrigatórias (SKU, Descrição, Quantidade_requerida)
+- ❌ Falta de colunas obrigatórias (Cod Material, Desc Material, pegar)
 - ❌ Arquivo não é Excel (.xlsx ou .xls)
 - ❌ Arquivo corrompido
 - ❌ Planilha completamente vazia
@@ -80,16 +90,16 @@ Para facilitar, você pode criar um arquivo Excel seguindo este modelo:
 
 ```
 Linha 1 (Cabeçalhos):
-SKU | Descrição | Quantidade_requerida | Unidade | Local_estoque | Observações
+Cod Material | Desc Material | pegar | Coluna | Estacao | Rack | Total disponivel
 
 Linha 2:
-12345 | Detergente 500ml | 24 | un | A-01-02 | Frágil
+12345 | Detergente 500ml | 24 | A | E1 | R01 | 80
 
 Linha 3:
-67890 | Sabão em Pó 1kg | 12 | cx | A-02-05 |
+67890 | Sabão em Pó 1kg | 12 | B | E1 | R02 | 40
 
 Linha 4:
-11111 | Amaciante 2L | 6 | un | A-01-03 | Produto pesado
+11111 | Amaciante 2L | 6 | A | E2 | R01 | 25
 ```
 
 ## Comportamento do Sistema

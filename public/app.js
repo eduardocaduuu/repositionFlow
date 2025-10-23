@@ -333,19 +333,13 @@ function renderTasks(tasks) {
             <div class="task-header">
                 <div>
                     <div class="task-id">#${task.id.substring(0, 8)}</div>
-                    <div>${task.nomeLoja}</div>
+                    <div><strong>${task.nomeAtendente}</strong> - ${task.uniqueSkus} SKUs (${task.totalItems} itens)</div>
                 </div>
                 <span class="task-status status-${task.status}">${task.status.replace('_', ' ')}</span>
             </div>
             <div class="task-info">
                 <div class="task-info-item">
-                    <span class="task-info-label">Atendente:</span> ${task.nomeAtendente}
-                </div>
-                <div class="task-info-item">
                     <span class="task-info-label">Prioridade:</span> ${task.prioridade}
-                </div>
-                <div class="task-info-item">
-                    <span class="task-info-label">Itens:</span> ${task.totalItems} (${task.uniqueSkus} SKUs)
                 </div>
                 <div class="task-info-item">
                     <span class="task-info-label">Criado:</span> ${formatDate(task.createdAt)}
@@ -387,18 +381,16 @@ async function handleUpload(e) {
     e.preventDefault();
 
     const nomeAtendente = document.getElementById('nomeAtendente').value.trim();
-    const nomeLoja = document.getElementById('nomeLoja').value.trim();
     const prioridade = document.getElementById('prioridade').value;
     const planilha = document.getElementById('planilha').files[0];
 
-    if (!nomeAtendente || !nomeLoja || !planilha) {
+    if (!nomeAtendente || !planilha) {
         showNotification('Por favor, preencha todos os campos', 'error');
         return;
     }
 
     const formData = new FormData();
     formData.append('nomeAtendente', nomeAtendente);
-    formData.append('nomeLoja', nomeLoja);
     formData.append('prioridade', prioridade);
     formData.append('planilha', planilha);
 
@@ -465,9 +457,6 @@ function renderTaskDetails(task) {
 
         <div class="task-info" style="margin: 20px 0;">
             <div class="task-info-item">
-                <span class="task-info-label">Loja:</span> ${task.nomeLoja}
-            </div>
-            <div class="task-info-item">
                 <span class="task-info-label">Atendente:</span> ${task.nomeAtendente}
             </div>
             <div class="task-info-item">
@@ -517,8 +506,9 @@ function renderTaskDetails(task) {
                 <tr>
                     <th>SKU</th>
                     <th>Descrição</th>
-                    <th>Quantidade</th>
-                    <th>Local</th>
+                    <th>Qtd Pegar</th>
+                    <th>Localização</th>
+                    <th>Estoque Disp.</th>
                     ${canControl ? '<th>Status</th>' : ''}
                     ${task.status === 'CONCLUIDO' ? '<th>Status</th>' : ''}
                     ${canControl ? '<th>Ações</th>' : ''}
@@ -527,10 +517,11 @@ function renderTaskDetails(task) {
             <tbody>
                 ${task.items.map(item => `
                     <tr>
-                        <td>${item.SKU}</td>
-                        <td>${item['Descrição'] || item.Descricao || '-'}</td>
-                        <td>${item.Quantidade_requerida}</td>
-                        <td>${item.Local_estoque || '-'}</td>
+                        <td><strong>${item.sku}</strong></td>
+                        <td>${item.descricao}</td>
+                        <td><strong>${item.quantidade_pegar}</strong></td>
+                        <td><small>${item.localizacao}</small></td>
+                        <td>${item.total_disponivel || '-'}</td>
                         ${canControl || task.status === 'CONCLUIDO' ? `
                             <td>
                                 ${item.status_separacao === 'OK' ? '<span class="item-status-ok">OK</span>' : ''}
@@ -540,8 +531,8 @@ function renderTaskDetails(task) {
                         ` : ''}
                         ${canControl ? `
                             <td class="item-actions">
-                                <button class="btn btn-success" onclick="markItem('${task.id}', '${item.SKU}', 'OK')">OK</button>
-                                <button class="btn btn-danger" onclick="markItem('${task.id}', '${item.SKU}', 'FALTANDO')">Falta</button>
+                                <button class="btn btn-success" onclick="markItem('${task.id}', '${item.sku}', 'OK')">OK</button>
+                                <button class="btn btn-danger" onclick="markItem('${task.id}', '${item.sku}', 'FALTANDO')">Falta</button>
                             </td>
                         ` : ''}
                     </tr>

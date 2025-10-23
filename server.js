@@ -1,0 +1,616 @@
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const path = require('path');
+const cors = require('cors');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+// Criar diretório de uploads se não existir
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configuração do Multer para upload de arquivos
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${uuidv4()}-${file.originalname}`;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos Excel (.xlsx, .xls) são permitidos'));
+    }
+  }
+});
+
+// Armazenamento em memória (para plano gratuito do Render)
+// Em produção, usar banco de dados
+let tasks = [];
+let users = []; // {id, name, role: 'atendente' | 'separador', ws}
+
+// Broadcast para todos os clientes conectados
+function broadcast(message, filterRole = null) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      const user = users.find(u => u.ws === client);
+      if (!filterRole || (user && user.role === filterRole)) {
+        client.send(JSON.stringify(message));
+      }
+    }
+  });
+}
+
+// Validar colunas obrigatórias da planilha
+function validateExcelColumns(worksheet) {
+  const requiredColumns = ['SKU', 'Descrição', 'Quantidade_requerida'];
+  const headers = [];
+
+  const range = xlsx.utils.decode_range(worksheet['!ref']);
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const cellAddress = xlsx.utils.encode_cell({ r: 0, c: col });
+    const cell = worksheet[cellAddress];
+    if (cell && cell.v) {
+      headers.push(cell.v.toString().trim());
+    }
+  }
+
+  const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+
+  return {
+    valid: missingColumns.length === 0,
+    missingColumns,
+    headers
+  };
+}
+
+// Processar planilha Excel
+function processExcel(filePath) {
+  const workbook = xlsx.readFile(filePath);
+  const sheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'reposicao')
+                    || workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+
+  const validation = validateExcelColumns(worksheet);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: `Colunas obrigatórias ausentes: ${validation.missingColumns.join(', ')}`
+    };
+  }
+
+  const data = xlsx.utils.sheet_to_json(worksheet);
+
+  // Agrupar por SKU e somar quantidades
+  const itemsMap = new Map();
+  data.forEach(row => {
+    const sku = row.SKU?.toString() || '';
+    if (sku) {
+      if (itemsMap.has(sku)) {
+        const existing = itemsMap.get(sku);
+        existing.Quantidade_requerida = (existing.Quantidade_requerida || 0) + (row.Quantidade_requerida || 0);
+      } else {
+        itemsMap.set(sku, { ...row });
+      }
+    }
+  });
+
+  const items = Array.from(itemsMap.values());
+
+  return {
+    success: true,
+    items,
+    totalItems: items.reduce((sum, item) => sum + (item.Quantidade_requerida || 0), 0),
+    uniqueSkus: items.length
+  };
+}
+
+// WebSocket connection
+wss.on('connection', (ws) => {
+  console.log('Novo cliente conectado');
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+
+      if (data.type === 'register') {
+        // Registrar usuário
+        const userId = uuidv4();
+        users.push({
+          id: userId,
+          name: data.name,
+          role: data.role,
+          ws: ws
+        });
+
+        ws.send(JSON.stringify({
+          type: 'registered',
+          userId,
+          message: 'Registrado com sucesso'
+        }));
+
+        console.log(`Usuário registrado: ${data.name} (${data.role})`);
+      }
+    } catch (error) {
+      console.error('Erro ao processar mensagem WebSocket:', error);
+    }
+  });
+
+  ws.on('close', () => {
+    users = users.filter(u => u.ws !== ws);
+    console.log('Cliente desconectado');
+  });
+});
+
+// API Routes
+
+// Criar nova tarefa (upload de planilha)
+app.post('/api/tasks', upload.single('planilha'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+
+    const { nomeAtendente, nomeLoja, prioridade } = req.body;
+
+    if (!nomeAtendente || !nomeLoja) {
+      return res.status(400).json({ error: 'Nome do atendente e loja são obrigatórios' });
+    }
+
+    // Processar planilha
+    const result = processExcel(req.file.path);
+
+    if (!result.success) {
+      // Remover arquivo inválido
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: result.error });
+    }
+
+    // Criar tarefa
+    const task = {
+      id: uuidv4(),
+      nomeAtendente,
+      nomeLoja,
+      prioridade: prioridade || 'Média',
+      status: 'PENDENTE',
+      items: result.items,
+      totalItems: result.totalItems,
+      uniqueSkus: result.uniqueSkus,
+      arquivoOriginal: req.file.filename,
+      createdAt: new Date().toISOString(),
+      timeline: [{
+        action: 'CRIADA',
+        timestamp: new Date().toISOString(),
+        user: nomeAtendente
+      }]
+    };
+
+    tasks.push(task);
+
+    // Notificar separadores
+    broadcast({
+      type: 'new_task',
+      task: {
+        id: task.id,
+        nomeAtendente: task.nomeAtendente,
+        nomeLoja: task.nomeLoja,
+        prioridade: task.prioridade,
+        totalItems: task.totalItems,
+        uniqueSkus: task.uniqueSkus,
+        createdAt: task.createdAt
+      }
+    }, 'separador');
+
+    res.json({
+      success: true,
+      taskId: task.id,
+      message: 'Tarefa criada com sucesso',
+      summary: {
+        totalItems: result.totalItems,
+        uniqueSkus: result.uniqueSkus,
+        linhas: result.items.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao criar tarefa:', error);
+    res.status(500).json({ error: 'Erro ao processar planilha' });
+  }
+});
+
+// Listar tarefas
+app.get('/api/tasks', (req, res) => {
+  const { status, atendente, dataInicio, dataFim } = req.query;
+
+  let filteredTasks = [...tasks];
+
+  if (status) {
+    filteredTasks = filteredTasks.filter(t => t.status === status);
+  }
+
+  if (atendente) {
+    filteredTasks = filteredTasks.filter(t =>
+      t.nomeAtendente.toLowerCase().includes(atendente.toLowerCase())
+    );
+  }
+
+  if (dataInicio) {
+    filteredTasks = filteredTasks.filter(t =>
+      new Date(t.createdAt) >= new Date(dataInicio)
+    );
+  }
+
+  if (dataFim) {
+    filteredTasks = filteredTasks.filter(t =>
+      new Date(t.createdAt) <= new Date(dataFim)
+    );
+  }
+
+  // Ordenar por data de criação (mais recentes primeiro)
+  filteredTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.json(filteredTasks);
+});
+
+// Obter detalhes de uma tarefa
+app.get('/api/tasks/:id', (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  res.json(task);
+});
+
+// Iniciar separação (iniciar cronômetro)
+app.post('/api/tasks/:id/start', (req, res) => {
+  const { nomeSeparador } = req.body;
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  if (task.status === 'EM_SEPARACAO') {
+    return res.status(400).json({
+      error: 'Já existe uma separação em andamento',
+      separador: task.nomeSeparador
+    });
+  }
+
+  if (task.status === 'CONCLUIDO') {
+    return res.status(400).json({ error: 'Tarefa já concluída' });
+  }
+
+  task.status = 'EM_SEPARACAO';
+  task.nomeSeparador = nomeSeparador;
+  task.startTime = new Date().toISOString();
+  task.activeTime = 0; // Tempo ativo em segundos
+  task.isPaused = false;
+  task.pausas = [];
+
+  task.timeline.push({
+    action: 'INICIADA',
+    timestamp: task.startTime,
+    user: nomeSeparador
+  });
+
+  // Notificar todos os clientes
+  broadcast({
+    type: 'task_started',
+    taskId: task.id,
+    nomeSeparador,
+    startTime: task.startTime
+  });
+
+  res.json({
+    success: true,
+    message: 'Separação iniciada',
+    task: {
+      id: task.id,
+      status: task.status,
+      startTime: task.startTime
+    }
+  });
+});
+
+// Pausar separação
+app.post('/api/tasks/:id/pause', (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  if (task.status !== 'EM_SEPARACAO') {
+    return res.status(400).json({ error: 'Tarefa não está em separação' });
+  }
+
+  if (task.isPaused) {
+    return res.status(400).json({ error: 'Tarefa já está pausada' });
+  }
+
+  const now = new Date().toISOString();
+  task.isPaused = true;
+  task.pauseStartTime = now;
+
+  task.timeline.push({
+    action: 'PAUSADA',
+    timestamp: now,
+    user: task.nomeSeparador
+  });
+
+  broadcast({
+    type: 'task_paused',
+    taskId: task.id,
+    pauseTime: now
+  });
+
+  res.json({ success: true, message: 'Separação pausada' });
+});
+
+// Retomar separação
+app.post('/api/tasks/:id/resume', (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  if (!task.isPaused) {
+    return res.status(400).json({ error: 'Tarefa não está pausada' });
+  }
+
+  const now = new Date().toISOString();
+  const pauseDuration = (new Date(now) - new Date(task.pauseStartTime)) / 1000;
+
+  task.pausas.push({
+    inicio: task.pauseStartTime,
+    fim: now,
+    duracao: pauseDuration
+  });
+
+  task.isPaused = false;
+  delete task.pauseStartTime;
+
+  task.timeline.push({
+    action: 'RETOMADA',
+    timestamp: now,
+    user: task.nomeSeparador
+  });
+
+  broadcast({
+    type: 'task_resumed',
+    taskId: task.id,
+    resumeTime: now
+  });
+
+  res.json({ success: true, message: 'Separação retomada' });
+});
+
+// Atualizar status de item
+app.patch('/api/tasks/:id/items/:sku', (req, res) => {
+  const { status, observacao } = req.body;
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  const item = task.items.find(i => i.SKU?.toString() === req.params.sku);
+
+  if (!item) {
+    return res.status(404).json({ error: 'Item não encontrado' });
+  }
+
+  item.status_separacao = status; // 'OK' ou 'FALTANDO'
+  if (observacao) {
+    item.observacao_separacao = observacao;
+  }
+
+  broadcast({
+    type: 'item_updated',
+    taskId: task.id,
+    sku: req.params.sku,
+    status
+  });
+
+  res.json({ success: true, item });
+});
+
+// Concluir separação
+app.post('/api/tasks/:id/complete', (req, res) => {
+  const task = tasks.find(t => t.id === req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Tarefa não encontrada' });
+  }
+
+  if (task.status !== 'EM_SEPARACAO') {
+    return res.status(400).json({ error: 'Tarefa não está em separação' });
+  }
+
+  const now = new Date().toISOString();
+
+  // Calcular tempo ativo
+  const totalTime = (new Date(now) - new Date(task.startTime)) / 1000;
+  const pauseTime = task.pausas.reduce((sum, p) => sum + p.duracao, 0);
+  task.activeTime = totalTime - pauseTime;
+
+  task.status = 'CONCLUIDO';
+  task.endTime = now;
+
+  task.timeline.push({
+    action: 'CONCLUIDA',
+    timestamp: now,
+    user: task.nomeSeparador
+  });
+
+  // Formatar tempo para exibição
+  const hours = Math.floor(task.activeTime / 3600);
+  const minutes = Math.floor((task.activeTime % 3600) / 60);
+  const seconds = Math.floor(task.activeTime % 60);
+  task.durationFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+  // Notificar todos os clientes
+  broadcast({
+    type: 'task_completed',
+    taskId: task.id,
+    endTime: now,
+    duration: task.durationFormatted,
+    activeTime: task.activeTime
+  });
+
+  res.json({
+    success: true,
+    message: 'Separação concluída',
+    duration: task.durationFormatted,
+    activeTime: task.activeTime
+  });
+});
+
+// Obter métricas
+app.get('/api/metrics', (req, res) => {
+  const { periodo } = req.query; // 'dia', 'semana', 'mes'
+
+  let filteredTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+
+  const now = new Date();
+  if (periodo === 'dia') {
+    const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneDayAgo);
+  } else if (periodo === 'semana') {
+    const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneWeekAgo);
+  } else if (periodo === 'mes') {
+    const oneMonthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneMonthAgo);
+  }
+
+  // Tempo médio
+  const avgTime = filteredTasks.length > 0
+    ? filteredTasks.reduce((sum, t) => sum + t.activeTime, 0) / filteredTasks.length
+    : 0;
+
+  // Por atendente
+  const porAtendente = {};
+  filteredTasks.forEach(t => {
+    if (!porAtendente[t.nomeAtendente]) {
+      porAtendente[t.nomeAtendente] = { count: 0, totalTime: 0 };
+    }
+    porAtendente[t.nomeAtendente].count++;
+    porAtendente[t.nomeAtendente].totalTime += t.activeTime;
+  });
+
+  // Por separador
+  const porSeparador = {};
+  filteredTasks.forEach(t => {
+    if (t.nomeSeparador) {
+      if (!porSeparador[t.nomeSeparador]) {
+        porSeparador[t.nomeSeparador] = { count: 0, totalTime: 0 };
+      }
+      porSeparador[t.nomeSeparador].count++;
+      porSeparador[t.nomeSeparador].totalTime += t.activeTime;
+    }
+  });
+
+  // Ranking de separadores (melhores tempos médios)
+  const rankingSeparadores = Object.entries(porSeparador)
+    .map(([nome, data]) => ({
+      nome,
+      count: data.count,
+      avgTime: data.totalTime / data.count
+    }))
+    .sort((a, b) => a.avgTime - b.avgTime);
+
+  res.json({
+    periodo: periodo || 'todos',
+    totalTarefas: filteredTasks.length,
+    tempoMedio: avgTime,
+    porAtendente,
+    porSeparador,
+    rankingSeparadores
+  });
+});
+
+// Exportar relatório CSV
+app.get('/api/export/csv', (req, res) => {
+  const { dataInicio, dataFim } = req.query;
+
+  let filteredTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+
+  if (dataInicio) {
+    filteredTasks = filteredTasks.filter(t =>
+      new Date(t.createdAt) >= new Date(dataInicio)
+    );
+  }
+
+  if (dataFim) {
+    filteredTasks = filteredTasks.filter(t =>
+      new Date(t.createdAt) <= new Date(dataFim)
+    );
+  }
+
+  // Gerar CSV
+  const headers = 'ID,Atendente,Loja,Separador,Prioridade,Criado em,Iniciado em,Concluído em,Duração,Itens Únicos,Total Itens\n';
+  const rows = filteredTasks.map(t =>
+    `${t.id},${t.nomeAtendente},${t.nomeLoja},${t.nomeSeparador || ''},${t.prioridade},${t.createdAt},${t.startTime},${t.endTime},${t.durationFormatted},${t.uniqueSkus},${t.totalItems}`
+  ).join('\n');
+
+  const csv = headers + rows;
+
+  res.header('Content-Type', 'text/csv');
+  res.header('Content-Disposition', 'attachment; filename=relatorio.csv');
+  res.send(csv);
+});
+
+// Download de arquivo
+app.get('/api/download/:filename', (req, res) => {
+  const filePath = path.join(uploadDir, req.params.filename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Arquivo não encontrado' });
+  }
+
+  res.download(filePath);
+});
+
+// Health check para o Render
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Servir frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+server.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
+});

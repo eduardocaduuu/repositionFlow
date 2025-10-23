@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RepositionFlow - Controle de Separação de Estoque</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>RepositionFlow</h1>
+            <p>Sistema de Controle de Separação de Estoque</p>
+        </header>
+
+        <!-- Modal de Login -->
+        <div id="loginModal" class="modal active">
+            <div class="modal-content">
+                <h2>Bem-vindo ao RepositionFlow</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="userName">Nome:</label>
+                        <input type="text" id="userName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userRole">Função:</label>
+                        <select id="userRole" required>
+                            <option value="">Selecione...</option>
+                            <option value="atendente">Atendente</option>
+                            <option value="separador">Separador</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Entrar</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Navegação -->
+        <nav id="mainNav" class="hidden">
+            <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+            <button class="nav-btn" data-view="nova-requisicao" id="novaTarefaBtn">Nova Requisição</button>
+            <button class="nav-btn" data-view="metricas" id="metricasBtn">Métricas</button>
+            <button class="nav-btn logout-btn">Sair</button>
+            <span class="user-info"></span>
+        </nav>
+
+        <!-- View: Dashboard -->
+        <div id="dashboard" class="view hidden">
+            <div class="controls">
+                <h2>Tarefas</h2>
+                <div class="filters">
+                    <select id="filterStatus">
+                        <option value="">Todos os Status</option>
+                        <option value="PENDENTE">Pendente</option>
+                        <option value="EM_SEPARACAO">Em Separação</option>
+                        <option value="CONCLUIDO">Concluído</option>
+                    </select>
+                    <input type="text" id="filterAtendente" placeholder="Buscar por atendente...">
+                    <button id="btnRefresh" class="btn btn-secondary">Atualizar</button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>Pendentes</h3>
+                    <p class="stat-value" id="statPendente">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Em Separação</h3>
+                    <p class="stat-value" id="statEmSeparacao">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Concluídas</h3>
+                    <p class="stat-value" id="statConcluido">0</p>
+                </div>
+            </div>
+
+            <div id="taskList" class="task-list">
+                <p class="empty-state">Nenhuma tarefa encontrada</p>
+            </div>
+        </div>
+
+        <!-- View: Nova Requisição -->
+        <div id="nova-requisicao" class="view hidden">
+            <h2>Nova Requisição de Reposição</h2>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="nomeAtendente">Nome do Atendente:</label>
+                    <input type="text" id="nomeAtendente" required>
+                </div>
+                <div class="form-group">
+                    <label for="nomeLoja">Nome da Loja:</label>
+                    <input type="text" id="nomeLoja" required>
+                </div>
+                <div class="form-group">
+                    <label for="prioridade">Prioridade:</label>
+                    <select id="prioridade">
+                        <option value="Baixa">Baixa</option>
+                        <option value="Média" selected>Média</option>
+                        <option value="Alta">Alta</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="planilha">Planilha Excel (.xlsx):</label>
+                    <input type="file" id="planilha" accept=".xlsx,.xls" required>
+                    <small>A planilha deve conter as colunas: SKU, Descrição, Quantidade_requerida</small>
+                </div>
+                <div id="previewContainer" class="hidden">
+                    <h3>Pré-visualização:</h3>
+                    <div id="previewContent"></div>
+                </div>
+                <button type="submit" class="btn btn-primary">Enviar Requisição</button>
+            </form>
+        </div>
+
+        <!-- View: Métricas -->
+        <div id="metricas" class="view hidden">
+            <h2>Métricas e Relatórios</h2>
+            <div class="controls">
+                <select id="periodFilter">
+                    <option value="">Todos</option>
+                    <option value="dia">Últimas 24h</option>
+                    <option value="semana">Última semana</option>
+                    <option value="mes">Último mês</option>
+                </select>
+                <button id="btnExportCSV" class="btn btn-secondary">Exportar CSV</button>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3>Total de Tarefas</h3>
+                    <p class="metric-value" id="metricTotal">0</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Tempo Médio</h3>
+                    <p class="metric-value" id="metricAvgTime">00:00:00</p>
+                </div>
+            </div>
+
+            <div class="metrics-section">
+                <h3>Ranking de Separadores (Melhores Tempos Médios)</h3>
+                <div id="rankingSeparadores"></div>
+            </div>
+
+            <div class="metrics-section">
+                <h3>Por Atendente</h3>
+                <div id="metricsAtendente"></div>
+            </div>
+
+            <div class="metrics-section">
+                <h3>Por Separador</h3>
+                <div id="metricsSeparador"></div>
+            </div>
+        </div>
+
+        <!-- Modal de Detalhes da Tarefa -->
+        <div id="taskModal" class="modal">
+            <div class="modal-content modal-large">
+                <span class="close">&times;</span>
+                <div id="taskDetails"></div>
+            </div>
+        </div>
+
+        <!-- Notificações -->
+        <div id="notifications"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

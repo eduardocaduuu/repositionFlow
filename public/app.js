@@ -265,7 +265,13 @@ function handleWebSocketMessage(data) {
 function switchView(viewName) {
     console.log('Mudando para view:', viewName);
 
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    // Ocultar todas as views (adicionar hidden, remover active)
+    document.querySelectorAll('.view').forEach(v => {
+        v.classList.remove('active');
+        v.classList.add('hidden');
+    });
+
+    // Desativar todos os botões
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
     const viewElement = document.getElementById(viewName);
@@ -275,7 +281,10 @@ function switchView(viewName) {
     console.log('Nav button encontrado:', navButton);
 
     if (viewElement) {
+        // IMPORTANTE: Remover hidden E adicionar active
+        viewElement.classList.remove('hidden');
         viewElement.classList.add('active');
+        console.log('✓ View mostrada:', viewName, '| Classes:', viewElement.className);
     } else {
         console.error('View não encontrada:', viewName);
     }

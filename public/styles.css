@@ -441,6 +441,24 @@ nav {
     margin-top: 20px;
 }
 
+/* Export Button Header */
+.export-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 0 10px 0;
+    gap: 15px;
+}
+
+.export-header h3 {
+    margin: 0;
+    flex: 1;
+}
+
+.export-header .btn {
+    white-space: nowrap;
+}
+
 /* Items Table */
 .items-table {
     width: 100%;
@@ -871,6 +889,22 @@ nav {
 
     .cronometro-controls .btn {
         width: 100%;
+    }
+
+    /* Export Header - Mobile */
+    .export-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .export-header h3 {
+        font-size: 1.1rem;
+    }
+
+    .export-header .btn {
+        width: 100%;
+        font-size: 0.9rem;
     }
 
     /* Items Table - Mobile Scroll */

@@ -500,7 +500,12 @@ function renderTaskDetails(task) {
             <button class="btn btn-primary" onclick="startTask('${task.id}')">Iniciar Separação</button>
         ` : ''}
 
-        <h3>Itens (${task.items.length})</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 10px 0;">
+            <h3 style="margin: 0;">Itens (${task.items.length})</h3>
+            <button class="btn btn-secondary" onclick="exportTaskToExcel('${task.id}')" style="width: auto; padding: 10px 20px;">
+                📥 Exportar XLSX
+            </button>
+        </div>
         <table class="items-table">
             <thead>
                 <tr>
@@ -794,6 +799,35 @@ async function exportCSV() {
     } catch (error) {
         console.error('Erro ao exportar:', error);
         showNotification('Erro ao exportar relatório', 'error');
+    }
+}
+
+// Exportar tarefa para Excel
+async function exportTaskToExcel(taskId) {
+    try {
+        showNotification('Gerando arquivo Excel...', 'success');
+
+        // Fazer download do arquivo
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/export-excel`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao gerar arquivo');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tarefa_${taskId.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        showNotification('Arquivo Excel baixado com sucesso!', 'success');
+    } catch (error) {
+        console.error('Erro ao exportar:', error);
+        showNotification('Erro ao exportar para Excel', 'error');
     }
 }
 

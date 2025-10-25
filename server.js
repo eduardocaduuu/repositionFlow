@@ -626,6 +626,115 @@ app.get('/api/download/:filename', (req, res) => {
   res.download(filePath);
 });
 
+// Exportar tarefa para Excel
+app.get('/api/tasks/:id/export-excel', (req, res) => {
+  try {
+    const task = tasks.find(t => t.id === req.params.id);
+
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    // Criar workbook
+    const workbook = xlsx.utils.book_new();
+
+    // Preparar dados para a planilha
+    const worksheetData = [
+      // Informações da tarefa
+      ['INFORMAÇÕES DA TAREFA'],
+      ['ID da Tarefa', task.id],
+      ['Atendente', task.nomeAtendente],
+      ['Prioridade', task.prioridade],
+      ['Status', task.status],
+      ['Criado em', new Date(task.createdAt).toLocaleString('pt-BR')],
+      [''],
+      // Headers dos itens
+      ['SKU', 'Descrição', 'Qtd Pegar', 'Localização', 'Estoque Disponível', 'Total Físico', 'Total Alocado', 'Status Separação', 'Observação']
+    ];
+
+    // Adicionar itens
+    task.items.forEach(item => {
+      worksheetData.push([
+        item.sku,
+        item.descricao,
+        item.quantidade_pegar,
+        item.localizacao,
+        item.total_disponivel || '',
+        item.total_fisico || '',
+        item.total_alocado || '',
+        item.status_separacao || '-',
+        item.observacao_separacao || ''
+      ]);
+    });
+
+    // Adicionar totais
+    const totalPegar = task.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
+    worksheetData.push([]);
+    worksheetData.push(['TOTAL DE ITENS', task.items.length, totalPegar]);
+
+    // Se tiver informações de separação
+    if (task.nomeSeparador) {
+      worksheetData.push([]);
+      worksheetData.push(['INFORMAÇÕES DE SEPARAÇÃO']);
+      worksheetData.push(['Separador', task.nomeSeparador]);
+
+      if (task.startTime) {
+        worksheetData.push(['Iniciado em', new Date(task.startTime).toLocaleString('pt-BR')]);
+      }
+
+      if (task.endTime) {
+        worksheetData.push(['Concluído em', new Date(task.endTime).toLocaleString('pt-BR')]);
+        worksheetData.push(['Duração', task.durationFormatted || '-']);
+      }
+
+      // Estatísticas de separação
+      const itensOK = task.items.filter(i => i.status_separacao === 'OK').length;
+      const itensFaltando = task.items.filter(i => i.status_separacao === 'FALTANDO').length;
+      const itensPendentes = task.items.length - itensOK - itensFaltando;
+
+      worksheetData.push([]);
+      worksheetData.push(['ESTATÍSTICAS']);
+      worksheetData.push(['Itens OK', itensOK]);
+      worksheetData.push(['Itens Faltando', itensFaltando]);
+      worksheetData.push(['Itens Pendentes', itensPendentes]);
+    }
+
+    // Criar worksheet
+    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+
+    // Definir largura das colunas
+    worksheet['!cols'] = [
+      { wch: 15 },  // SKU
+      { wch: 40 },  // Descrição
+      { wch: 12 },  // Qtd Pegar
+      { wch: 30 },  // Localização
+      { wch: 15 },  // Estoque Disponível
+      { wch: 15 },  // Total Físico
+      { wch: 15 },  // Total Alocado
+      { wch: 15 },  // Status Separação
+      { wch: 30 }   // Observação
+    ];
+
+    // Adicionar worksheet ao workbook
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Itens da Tarefa');
+
+    // Gerar buffer do Excel
+    const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Nome do arquivo
+    const fileName = `tarefa_${task.id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    // Enviar arquivo
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(excelBuffer);
+
+  } catch (error) {
+    console.error('Erro ao exportar tarefa para Excel:', error);
+    res.status(500).json({ error: 'Erro ao gerar arquivo Excel' });
+  }
+});
+
 // Health check para o Render
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(git init)",
-      "Bash(git remote add origin https://github.com/eduardocaduuu/repositionFlow.git)"
+      "Bash(git remote add origin https://github.com/eduardocaduuu/repositionFlow.git)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

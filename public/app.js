@@ -147,7 +147,18 @@ function handleLogout() {
     Object.values(state.charts).forEach(chart => chart.destroy());
     state.charts = {};
 
+    // Hide all views
     hideElement('mainApp');
+    hideElement('dashboard');
+    hideElement('nova-tarefa');
+    hideElement('metricas');
+    hideElement('admin-dashboard');
+
+    // Hide all conditional buttons
+    hideElement('novaTarefaBtn');
+    hideElement('metricasBtn');
+    hideElement('adminDashboardBtn');
+
     showElement('roleSelectionScreen');
 
     // Reset forms
@@ -169,7 +180,12 @@ function showMainApp() {
     document.getElementById('userDisplay').textContent =
         `${roleEmoji[state.user.role]} ${state.user.name}`;
 
-    // Show/hide navigation based on role
+    // FIRST: Hide all conditional navigation buttons
+    hideElement('novaTarefaBtn');
+    hideElement('metricasBtn');
+    hideElement('adminDashboardBtn');
+
+    // THEN: Show only buttons appropriate for current role
     if (state.user.role === 'atendente' || state.user.role === 'admin') {
         showElement('novaTarefaBtn');
     }
@@ -260,6 +276,24 @@ function handleWebSocketMessage(data) {
 // ==========================================
 
 function switchView(viewName) {
+    // Security check: Prevent non-admin from accessing admin views
+    if (viewName === 'admin-dashboard' && state.user.role !== 'admin') {
+        showToast('Acesso negado: apenas administradores', 'error');
+        return;
+    }
+
+    // Security check: Prevent separador from accessing nova-tarefa
+    if (viewName === 'nova-tarefa' && state.user.role === 'separador') {
+        showToast('Acesso negado: apenas atendentes e administradores', 'error');
+        return;
+    }
+
+    // Security check: Prevent non-admin from accessing metricas
+    if (viewName === 'metricas' && state.user.role !== 'admin') {
+        showToast('Acesso negado: apenas administradores', 'error');
+        return;
+    }
+
     // Update navigation
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');

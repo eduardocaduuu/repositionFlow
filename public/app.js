@@ -432,8 +432,33 @@ function createTaskCard(task) {
                 </div>
                 ` : ''}
             </div>
-            <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                📅 ${new Date(task.createdAt).toLocaleString('pt-BR')}
+            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                <div style="font-size: 0.85rem;">
+                    <span style="color: var(--text-secondary);">🕒 Criada:</span>
+                    <span style="color: var(--text-primary); font-weight: 500; margin-left: 0.25rem;">
+                        ${new Date(task.createdAt).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </span>
+                </div>
+                ${task.endTime ? `
+                <div style="font-size: 0.85rem;">
+                    <span style="color: var(--text-secondary);">✅ Finalizada:</span>
+                    <span style="color: var(--accent-green); font-weight: 500; margin-left: 0.25rem;">
+                        ${new Date(task.endTime).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </span>
+                </div>
+                ` : ''}
             </div>
         </div>
     `;

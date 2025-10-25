@@ -241,7 +241,7 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
-    const { nomeAtendente, prioridade } = req.body;
+    const { nomeAtendente, prioridade, observacoes } = req.body;
 
     if (!nomeAtendente) {
       return res.status(400).json({ error: 'Nome do atendente é obrigatório' });
@@ -261,6 +261,7 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
       id: uuidv4(),
       nomeAtendente,
       prioridade: prioridade || 'Média',
+      observacoes: observacoes || '',
       status: 'PENDENTE',
       items: result.items,
       totalItems: result.totalItems,

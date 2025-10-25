@@ -81,11 +81,10 @@ function setupEventListeners() {
 
 async function handleRoleSubmit(e) {
     e.preventDefault();
-    const name = document.getElementById('userName').value.trim();
     const role = document.getElementById('userRole').value;
 
-    if (!name || !role) {
-        showToast('Preencha todos os campos', 'error');
+    if (!role) {
+        showToast('Selecione sua função', 'error');
         return;
     }
 
@@ -96,8 +95,8 @@ async function handleRoleSubmit(e) {
         return;
     }
 
-    // Para atendente e separador, entrar direto
-    state.user = { name, role };
+    // Para atendente e separador, entrar direto (sem nome ainda)
+    state.user = { role };
     localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
     hideElement('roleSelectionScreen');
@@ -120,8 +119,7 @@ async function handleAdminLogin(e) {
         const data = await response.json();
 
         if (data.success) {
-            const name = document.getElementById('userName').value.trim();
-            state.user = { name, role: 'admin', token: data.token };
+            state.user = { name: 'Administrador', role: 'admin', token: data.token };
             localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
             hideElement('adminLoginScreen');
@@ -177,8 +175,15 @@ function showMainApp() {
         'separador': '📋',
         'admin': '👑'
     };
+    const roleLabel = {
+        'atendente': 'Atendente',
+        'separador': 'Separador',
+        'admin': 'Administrador'
+    };
     document.getElementById('userDisplay').textContent =
-        `${roleEmoji[state.user.role]} ${state.user.name}`;
+        state.user.name
+            ? `${roleEmoji[state.user.role]} ${state.user.name}`
+            : `${roleEmoji[state.user.role]} ${roleLabel[state.user.role]}`;
 
     // FIRST: Hide all conditional navigation buttons
     hideElement('novaTarefaBtn');
@@ -219,7 +224,7 @@ function connectWebSocket() {
         console.log('WebSocket conectado');
         state.ws.send(JSON.stringify({
             type: 'register',
-            name: state.user.name,
+            name: state.user.name || state.user.role,
             role: state.user.role
         }));
     };
@@ -410,6 +415,12 @@ function createTaskCard(task) {
                         👤 ${task.nomeAtendente}
                         ${task.nomeSeparador ? ` • 📋 ${task.nomeSeparador}` : ''}
                     </p>
+                    ${task.observacoes ? `
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; border-left: 3px solid var(--accent-green);">
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">📝 Observações:</div>
+                            <div style="font-size: 0.85rem; color: var(--text-primary);">${task.observacoes}</div>
+                        </div>
+                    ` : ''}
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-direction: column; align-items: flex-end;">
                     <span class="badge badge-${statusColors[task.status]}">${statusLabels[task.status]}</span>
@@ -509,6 +520,12 @@ function renderTaskModal(task) {
                 </div>
             </div>
             ${task.nomeSeparador ? `<div><strong>Separador:</strong> ${task.nomeSeparador}</div>` : ''}
+            ${task.observacoes ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); border-left: 4px solid var(--accent-green);">
+                    <strong style="color: var(--accent-green);">📝 Observações do Atendente:</strong>
+                    <p style="margin-top: 0.5rem; color: var(--text-primary); line-height: 1.5;">${task.observacoes}</p>
+                </div>
+            ` : ''}
             ${task.status === 'EM_SEPARACAO' ? `
                 <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md);">
                     <strong>⏱️ Tempo decorrido:</strong>
@@ -653,10 +670,29 @@ function closeModal() {
 
 async function startTask(taskId) {
     try {
+        // Pedir nome do separador se ainda não tiver
+        let nomeSeparador = state.user.name;
+        if (!nomeSeparador) {
+            nomeSeparador = prompt('Digite seu nome para iniciar a separação:');
+            if (!nomeSeparador || !nomeSeparador.trim()) {
+                showToast('Nome é obrigatório para iniciar a separação', 'error');
+                return;
+            }
+            nomeSeparador = nomeSeparador.trim();
+
+            // Salvar nome do separador no estado
+            state.user.name = nomeSeparador;
+            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+
+            // Atualizar display do usuário
+            const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };
+            document.getElementById('userDisplay').textContent = `${roleEmoji[state.user.role]} ${nomeSeparador}`;
+        }
+
         const response = await fetch(`/api/tasks/${taskId}/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nomeSeparador: state.user.name })
+            body: JSON.stringify({ nomeSeparador })
         });
 
         const data = await response.json();
@@ -772,7 +808,13 @@ async function handleUploadForm(e) {
 
     const nomeAtendente = document.getElementById('nomeAtendente').value.trim();
     const prioridade = document.getElementById('prioridade').value;
+    const observacoes = document.getElementById('observacoes').value.trim();
     const file = document.getElementById('planilhaFile').files[0];
+
+    if (!nomeAtendente) {
+        showToast('Digite seu nome', 'error');
+        return;
+    }
 
     if (!file) {
         showToast('Selecione um arquivo', 'error');
@@ -782,6 +824,7 @@ async function handleUploadForm(e) {
     const formData = new FormData();
     formData.append('nomeAtendente', nomeAtendente);
     formData.append('prioridade', prioridade);
+    formData.append('observacoes', observacoes);
     formData.append('planilha', file);
 
     try {
@@ -793,8 +836,18 @@ async function handleUploadForm(e) {
         const data = await response.json();
 
         if (data.success) {
+            // Salvar nome do atendente no estado do usuário
+            state.user.name = nomeAtendente;
+            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+
+            // Atualizar display do usuário
+            const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };
+            document.getElementById('userDisplay').textContent = `${roleEmoji[state.user.role]} ${state.user.name}`;
+
             showToast(`Tarefa criada! ${data.summary.uniqueSkus} SKUs únicos, ${data.summary.totalItems} itens`, 'success');
             document.getElementById('uploadForm').reset();
+            // Restaurar nome do atendente no campo
+            document.getElementById('nomeAtendente').value = nomeAtendente;
             switchView('dashboard');
         } else {
             showToast(data.error, 'error');

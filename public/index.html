@@ -25,13 +25,9 @@
             </div>
             <form id="roleForm">
                 <div class="form-group">
-                    <label for="userName">Seu Nome</label>
-                    <input type="text" id="userName" placeholder="Digite seu nome" required>
-                </div>
-                <div class="form-group">
-                    <label for="userRole">Função</label>
+                    <label for="userRole">Selecione sua Função</label>
                     <select id="userRole" required>
-                        <option value="">Selecione sua função...</option>
+                        <option value="">Escolha sua função...</option>
                         <option value="atendente">👤 Atendente</option>
                         <option value="separador">📋 Separador</option>
                         <option value="admin">👑 Administrador</option>
@@ -182,6 +178,13 @@
                                 <option value="Média" selected>🟡 Média</option>
                                 <option value="Alta">🔴 Alta</option>
                             </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="observacoes">Observações (opcional)</label>
+                            <textarea id="observacoes" placeholder="Instruções especiais, localização preferencial, urgências..." rows="3" style="resize: vertical; min-height: 80px;"></textarea>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                                Ex: "Priorizar itens da coluna A", "Cliente aguardando", etc.
+                            </small>
                         </div>
                         <div class="form-group">
                             <label for="planilhaFile">Planilha Excel (.xlsx)</label>

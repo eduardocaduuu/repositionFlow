@@ -773,6 +773,110 @@ app.get('/api/tasks/:id/export-excel', (req, res) => {
   }
 });
 
+// Autenticação de admin
+app.post('/api/auth/admin', (req, res) => {
+  const { username, password } = req.body;
+
+  // Credenciais fixas para o admin
+  if (username === 'acqua' && password === '13707') {
+    res.json({
+      success: true,
+      message: 'Autenticação bem-sucedida',
+      token: 'admin-authenticated' // Token simples para esta implementação
+    });
+  } else {
+    res.status(401).json({
+      success: false,
+      error: 'Credenciais inválidas'
+    });
+  }
+});
+
+// Métricas detalhadas para dashboard admin
+app.get('/api/admin/dashboard', (req, res) => {
+  const completedTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+
+  // Estatísticas por separador
+  const separadorStats = {};
+  completedTasks.forEach(task => {
+    if (task.nomeSeparador) {
+      if (!separadorStats[task.nomeSeparador]) {
+        separadorStats[task.nomeSeparador] = {
+          nome: task.nomeSeparador,
+          totalSeparacoes: 0,
+          totalItens: 0,
+          tempoTotal: 0,
+          tempos: []
+        };
+      }
+      separadorStats[task.nomeSeparador].totalSeparacoes++;
+      separadorStats[task.nomeSeparador].totalItens += task.totalItems;
+      separadorStats[task.nomeSeparador].tempoTotal += task.activeTime;
+      separadorStats[task.nomeSeparador].tempos.push(task.activeTime);
+    }
+  });
+
+  // Calcular médias e ordenar
+  const separadores = Object.values(separadorStats).map(sep => ({
+    ...sep,
+    tempoMedio: sep.tempoTotal / sep.totalSeparacoes,
+    tempoMedioFormatado: formatTime(sep.tempoTotal / sep.totalSeparacoes)
+  })).sort((a, b) => b.totalSeparacoes - a.totalSeparacoes);
+
+  // Estatísticas por atendente
+  const atendenteStats = {};
+  tasks.forEach(task => {
+    if (!atendenteStats[task.nomeAtendente]) {
+      atendenteStats[task.nomeAtendente] = {
+        nome: task.nomeAtendente,
+        totalListas: 0,
+        totalItens: 0,
+        listasConcluidas: 0,
+        listasPendentes: 0
+      };
+    }
+    atendenteStats[task.nomeAtendente].totalListas++;
+    atendenteStats[task.nomeAtendente].totalItens += task.totalItems;
+    if (task.status === 'CONCLUIDO') {
+      atendenteStats[task.nomeAtendente].listasConcluidas++;
+    } else {
+      atendenteStats[task.nomeAtendente].listasPendentes++;
+    }
+  });
+
+  const atendentes = Object.values(atendenteStats)
+    .sort((a, b) => b.totalListas - a.totalListas);
+
+  // Estatísticas gerais
+  const stats = {
+    totalTarefas: tasks.length,
+    tarefasPendentes: tasks.filter(t => t.status === 'PENDENTE').length,
+    tarefasEmSeparacao: tasks.filter(t => t.status === 'EM_SEPARACAO').length,
+    tarefasConcluidas: completedTasks.length,
+    totalItens: tasks.reduce((sum, t) => sum + t.totalItems, 0),
+    tempoMedioSeparacao: completedTasks.length > 0
+      ? completedTasks.reduce((sum, t) => sum + t.activeTime, 0) / completedTasks.length
+      : 0
+  };
+
+  res.json({
+    stats,
+    separadores,
+    atendentes,
+    tarefasRecentes: tasks
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10)
+  });
+});
+
+// Helper para formatar tempo
+function formatTime(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
 // Health check para o Render
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

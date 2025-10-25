@@ -4,177 +4,401 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="description" content="Sistema de controle de separação de estoque com cronômetro em tempo real">
-    <meta name="theme-color" content="#2563eb">
+    <meta name="theme-color" content="#0a0a0a">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="RepositionFlow">
-    <title>RepositionFlow - Controle de Separação de Estoque</title>
+    <title>RepositionFlow - Sistema de Separação Inteligente</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>RepositionFlow</h1>
-            <p>Sistema de Controle de Separação de Estoque</p>
-        </header>
-
-        <!-- Modal de Login -->
-        <div id="loginModal" class="modal active">
-            <div class="modal-content">
-                <h2>Bem-vindo ao RepositionFlow</h2>
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="userName">Nome:</label>
-                        <input type="text" id="userName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="userRole">Função:</label>
-                        <select id="userRole" required>
-                            <option value="">Selecione...</option>
-                            <option value="atendente">Atendente</option>
-                            <option value="separador">Separador</option>
-                            <option value="admin">Administrador</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Entrar</button>
-                </form>
+    <!-- ==========================================
+         TELA DE SELEÇÃO DE ROLE
+         ========================================== -->
+    <div id="roleSelectionScreen" class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">📦</div>
+                <h1 class="login-title text-gradient">RepositionFlow</h1>
+                <p class="login-subtitle">Sistema de Separação Inteligente</p>
             </div>
-        </div>
-
-        <!-- Navegação -->
-        <nav id="mainNav" class="hidden">
-            <button type="button" class="nav-btn active" data-view="dashboard">Dashboard</button>
-            <button type="button" class="nav-btn hidden" data-view="nova-requisicao" id="novaTarefaBtn">Nova Requisição</button>
-            <button type="button" class="nav-btn hidden" data-view="metricas" id="metricasBtn">Métricas</button>
-            <button type="button" class="nav-btn logout-btn">Sair</button>
-            <span class="user-info"></span>
-        </nav>
-
-        <!-- View: Dashboard -->
-        <div id="dashboard" class="view hidden">
-            <div class="controls">
-                <h2>Tarefas</h2>
-                <div class="filters">
-                    <select id="filterStatus">
-                        <option value="">Todos os Status</option>
-                        <option value="PENDENTE">Pendente</option>
-                        <option value="EM_SEPARACAO">Em Separação</option>
-                        <option value="CONCLUIDO">Concluído</option>
-                    </select>
-                    <input type="text" id="filterAtendente" placeholder="Buscar por atendente...">
-                    <button id="btnRefresh" class="btn btn-secondary">Atualizar</button>
-                </div>
-            </div>
-
-            <div class="stats">
-                <div class="stat-card">
-                    <h3>Pendentes</h3>
-                    <p class="stat-value" id="statPendente">0</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Em Separação</h3>
-                    <p class="stat-value" id="statEmSeparacao">0</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Concluídas</h3>
-                    <p class="stat-value" id="statConcluido">0</p>
-                </div>
-            </div>
-
-            <div id="taskList" class="task-list">
-                <p class="empty-state">Nenhuma tarefa encontrada</p>
-            </div>
-        </div>
-
-        <!-- View: Nova Requisição -->
-        <div id="nova-requisicao" class="view hidden">
-            <h2>Nova Requisição de Reposição</h2>
-            <form id="uploadForm">
+            <form id="roleForm">
                 <div class="form-group">
-                    <label for="nomeAtendente">Nome do Atendente:</label>
-                    <input type="text" id="nomeAtendente" required>
+                    <label for="userName">Seu Nome</label>
+                    <input type="text" id="userName" placeholder="Digite seu nome" required>
                 </div>
                 <div class="form-group">
-                    <label for="prioridade">Prioridade:</label>
-                    <select id="prioridade">
-                        <option value="Baixa">Baixa</option>
-                        <option value="Média" selected>Média</option>
-                        <option value="Alta">Alta</option>
+                    <label for="userRole">Função</label>
+                    <select id="userRole" required>
+                        <option value="">Selecione sua função...</option>
+                        <option value="atendente">👤 Atendente</option>
+                        <option value="separador">📋 Separador</option>
+                        <option value="admin">👑 Administrador</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="planilha">Planilha Excel (.xlsx):</label>
-                    <input type="file" id="planilha" accept=".xlsx,.xls" required>
-                    <small>
-                        <strong>Colunas obrigatórias:</strong><br>
-                        • Cod Material (SKU do produto)<br>
-                        • Desc Material (Nome do produto)<br>
-                        • pegar (Quantidade a separar)<br>
-                        <strong>Colunas opcionais de localização:</strong><br>
-                        • Coluna, Estacao, Rack, Linha prod alocado, Coluna prod alocado<br>
-                        <strong>Colunas de estoque (informativas):</strong><br>
-                        • Total físico, Total alocado, Total disponivel
-                    </small>
-                </div>
-                <div id="previewContainer" class="hidden">
-                    <h3>Pré-visualização:</h3>
-                    <div id="previewContent"></div>
-                </div>
-                <button type="submit" class="btn btn-primary">Enviar Requisição</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                    Continuar →
+                </button>
             </form>
         </div>
-
-        <!-- View: Métricas -->
-        <div id="metricas" class="view hidden">
-            <h2>Métricas e Relatórios</h2>
-            <div class="controls">
-                <select id="periodFilter">
-                    <option value="">Todos</option>
-                    <option value="dia">Últimas 24h</option>
-                    <option value="semana">Última semana</option>
-                    <option value="mes">Último mês</option>
-                </select>
-                <button id="btnExportCSV" class="btn btn-secondary">Exportar CSV</button>
-            </div>
-
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <h3>Total de Tarefas</h3>
-                    <p class="metric-value" id="metricTotal">0</p>
-                </div>
-                <div class="metric-card">
-                    <h3>Tempo Médio</h3>
-                    <p class="metric-value" id="metricAvgTime">00:00:00</p>
-                </div>
-            </div>
-
-            <div class="metrics-section">
-                <h3>Ranking de Separadores (Melhores Tempos Médios)</h3>
-                <div id="rankingSeparadores"></div>
-            </div>
-
-            <div class="metrics-section">
-                <h3>Por Atendente</h3>
-                <div id="metricsAtendente"></div>
-            </div>
-
-            <div class="metrics-section">
-                <h3>Por Separador</h3>
-                <div id="metricsSeparador"></div>
-            </div>
-        </div>
-
-        <!-- Modal de Detalhes da Tarefa -->
-        <div id="taskModal" class="modal">
-            <div class="modal-content modal-large">
-                <span class="close">&times;</span>
-                <div id="taskDetails"></div>
-            </div>
-        </div>
-
-        <!-- Notificações -->
-        <div id="notifications"></div>
     </div>
+
+    <!-- ==========================================
+         TELA DE LOGIN ADMIN
+         ========================================== -->
+    <div id="adminLoginScreen" class="login-container hidden">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">👑</div>
+                <h1 class="login-title">Acesso Administrativo</h1>
+                <p class="login-subtitle">Área restrita - Credenciais necessárias</p>
+            </div>
+            <form id="adminLoginForm">
+                <div class="form-group">
+                    <label for="adminUsername">Usuário</label>
+                    <input type="text" id="adminUsername" placeholder="Digite o usuário" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="adminPassword">Senha</label>
+                    <input type="password" id="adminPassword" placeholder="Digite a senha" required autocomplete="current-password">
+                </div>
+                <div id="adminLoginError" class="hidden" style="color: var(--status-danger); margin-bottom: 1rem; text-align: center; font-size: 0.9rem;"></div>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="btn btn-ghost" id="btnBackToRole" style="flex: 1;">
+                        ← Voltar
+                    </button>
+                    <button type="submit" class="btn btn-primary" style="flex: 2;">
+                        Entrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         APLICAÇÃO PRINCIPAL
+         ========================================== -->
+    <div id="mainApp" class="hidden">
+        <!-- Header -->
+        <header>
+            <div class="header-content">
+                <a href="#" class="logo">
+                    📦 RepositionFlow
+                </a>
+                <nav class="nav-links">
+                    <button class="btn btn-ghost nav-btn active" data-view="dashboard">
+                        Dashboard
+                    </button>
+                    <button class="btn btn-ghost nav-btn hidden" data-view="nova-requisicao" id="novaTarefaBtn">
+                        Nova Requisição
+                    </button>
+                    <button class="btn btn-ghost nav-btn hidden" data-view="metricas" id="metricasBtn">
+                        Métricas
+                    </button>
+                    <button class="btn btn-ghost nav-btn hidden" data-view="admin-dashboard" id="adminDashboardBtn">
+                        Admin Dashboard
+                    </button>
+                </nav>
+                <div class="user-info">
+                    <span class="user-badge" id="userDisplay"></span>
+                    <button class="btn btn-danger btn-sm" id="btnLogout">Sair</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="container">
+            <!-- ==========================================
+                 VIEW: DASHBOARD (Todos)
+                 ========================================== -->
+            <div id="dashboard" class="view">
+                <div class="dashboard-header">
+                    <h1 class="dashboard-title">Dashboard</h1>
+                    <p class="dashboard-subtitle">Visão geral das tarefas de separação</p>
+                </div>
+
+                <!-- Filtros -->
+                <div class="glass-card" style="margin-bottom: 2rem;">
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <select id="filterStatus" class="btn btn-secondary" style="flex: 1; min-width: 200px;">
+                            <option value="">Todos os Status</option>
+                            <option value="PENDENTE">🟡 Pendente</option>
+                            <option value="EM_SEPARACAO">🔵 Em Separação</option>
+                            <option value="CONCLUIDO">🟢 Concluído</option>
+                        </select>
+                        <input type="text" id="filterAtendente" placeholder="Buscar por atendente..." style="flex: 2; min-width: 250px;">
+                        <button id="btnRefresh" class="btn btn-primary">
+                            🔄 Atualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon orange">⏳</div>
+                        <div class="stat-label">Pendentes</div>
+                        <div class="stat-value" id="statPendente">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">🔄</div>
+                        <div class="stat-label">Em Separação</div>
+                        <div class="stat-value" id="statEmSeparacao">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">✓</div>
+                        <div class="stat-label">Concluídas</div>
+                        <div class="stat-value" id="statConcluido">0</div>
+                    </div>
+                </div>
+
+                <!-- Task List -->
+                <div id="taskList" class="grid grid-cols-1" style="gap: 1.5rem;">
+                    <div class="glass-card text-center">
+                        <p style="color: var(--text-secondary);">Nenhuma tarefa encontrada</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 VIEW: NOVA REQUISIÇÃO (Atendente)
+                 ========================================== -->
+            <div id="nova-requisicao" class="view hidden">
+                <div class="dashboard-header">
+                    <h1 class="dashboard-title">Nova Requisição</h1>
+                    <p class="dashboard-subtitle">Envie uma planilha de reposição</p>
+                </div>
+
+                <div class="glass-card" style="max-width: 800px; margin: 0 auto;">
+                    <form id="uploadForm">
+                        <div class="form-group">
+                            <label for="nomeAtendente">Nome do Atendente</label>
+                            <input type="text" id="nomeAtendente" placeholder="Seu nome" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="prioridade">Prioridade</label>
+                            <select id="prioridade">
+                                <option value="Baixa">🟢 Baixa</option>
+                                <option value="Média" selected>🟡 Média</option>
+                                <option value="Alta">🔴 Alta</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="planilhaFile">Planilha Excel (.xlsx)</label>
+                            <input type="file" id="planilhaFile" accept=".xlsx,.xls" required>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                                A planilha deve conter: Cod Material, Desc Material, pegar
+                            </small>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                            📤 Enviar Requisição
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 VIEW: MÉTRICAS (Todos)
+                 ========================================== -->
+            <div id="metricas" class="view hidden">
+                <div class="dashboard-header">
+                    <h1 class="dashboard-title">Métricas</h1>
+                    <p class="dashboard-subtitle">Análise de desempenho e estatísticas</p>
+                </div>
+
+                <!-- Filtro de Período -->
+                <div class="glass-card" style="margin-bottom: 2rem;">
+                    <label style="margin-bottom: 0.5rem; display: block;">Período</label>
+                    <select id="metricsFilter" class="btn btn-secondary">
+                        <option value="dia">Últimas 24 horas</option>
+                        <option value="semana">Última semana</option>
+                        <option value="mes">Último mês</option>
+                        <option value="">Todo o período</option>
+                    </select>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon green">📊</div>
+                        <div class="stat-label">Total de Tarefas</div>
+                        <div class="stat-value" id="metricTotalTarefas">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">⏱️</div>
+                        <div class="stat-label">Tempo Médio</div>
+                        <div class="stat-value" id="metricTempoMedio">00:00</div>
+                    </div>
+                </div>
+
+                <!-- Ranking de Separadores -->
+                <div class="glass-card" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1.5rem;">🏆 Ranking de Separadores</h3>
+                    <div id="rankingSeparadores">
+                        <p style="color: var(--text-secondary); text-align: center;">Nenhum dado disponível</p>
+                    </div>
+                </div>
+
+                <!-- Estatísticas Detalhadas -->
+                <div class="grid grid-cols-2" style="margin-top: 2rem;">
+                    <div class="glass-card">
+                        <h3 style="margin-bottom: 1rem;">Por Atendente</h3>
+                        <div id="statsPorAtendente">
+                            <p style="color: var(--text-secondary);">Carregando...</p>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <h3 style="margin-bottom: 1rem;">Por Separador</h3>
+                        <div id="statsPorSeparador">
+                            <p style="color: var(--text-secondary);">Carregando...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 VIEW: ADMIN DASHBOARD (Admin apenas)
+                 ========================================== -->
+            <div id="admin-dashboard" class="view hidden">
+                <div class="dashboard-header">
+                    <h1 class="dashboard-title">
+                        <span class="text-gradient">Admin Dashboard</span>
+                    </h1>
+                    <p class="dashboard-subtitle">Análise completa de desempenho dos colaboradores</p>
+                </div>
+
+                <!-- Stats Cards Principais -->
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                    <div class="stat-card">
+                        <div class="stat-icon green">📋</div>
+                        <div class="stat-label">Total de Tarefas</div>
+                        <div class="stat-value" id="adminStatTotal">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">⏳</div>
+                        <div class="stat-label">Pendentes</div>
+                        <div class="stat-value" id="adminStatPendentes">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">🔄</div>
+                        <div class="stat-label">Em Separação</div>
+                        <div class="stat-value" id="adminStatEmSeparacao">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">✓</div>
+                        <div class="stat-label">Concluídas</div>
+                        <div class="stat-value" id="adminStatConcluidas">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">📦</div>
+                        <div class="stat-label">Total de Itens</div>
+                        <div class="stat-value" id="adminStatItens">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">⏱️</div>
+                        <div class="stat-label">Tempo Médio</div>
+                        <div class="stat-value" id="adminStatTempoMedio" style="font-size: 1.8rem;">00:00</div>
+                    </div>
+                </div>
+
+                <!-- Gráficos -->
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3 class="chart-title">📊 Top 5 Separadores - Total de Separações</h3>
+                        </div>
+                        <canvas id="chartSeparadores"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3 class="chart-title">⏱️ Tempo Médio por Separador</h3>
+                        </div>
+                        <canvas id="chartTemposSeparadores"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3 class="chart-title">👥 Top 5 Atendentes - Listas Enviadas</h3>
+                        </div>
+                        <canvas id="chartAtendentes"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3 class="chart-title">📦 Total de Itens por Atendente</h3>
+                        </div>
+                        <canvas id="chartItensAtendentes"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tabelas Detalhadas -->
+                <div class="grid grid-cols-2" style="margin-top: 2rem;">
+                    <div class="glass-card">
+                        <h3 style="margin-bottom: 1.5rem; color: var(--accent-green);">🏆 Separadores - Ranking Completo</h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Nome</th>
+                                        <th>Separações</th>
+                                        <th>Itens</th>
+                                        <th>Tempo Médio</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableSeparadores">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; color: var(--text-secondary);">
+                                            Carregando...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <h3 style="margin-bottom: 1.5rem; color: var(--accent-blue);">👤 Atendentes - Ranking Completo</h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Nome</th>
+                                        <th>Listas</th>
+                                        <th>Itens</th>
+                                        <th>Concluídas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableAtendentes">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; color: var(--text-secondary);">
+                                            Carregando...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL: DETALHES DA TAREFA
+         ========================================== -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h2 id="modalTaskTitle">Detalhes da Tarefa</h2>
+                <button class="modal-close" id="closeModal">×</button>
+            </div>
+            <div class="modal-body" id="modalTaskContent">
+                <!-- Conteúdo será inserido via JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast de Notificações -->
+    <div id="toastContainer" style="position: fixed; bottom: 2rem; right: 2rem; z-index: 9999;"></div>
 
     <script src="app.js"></script>
 </body>

@@ -1,180 +1,206 @@
-// Estado global
+// ==========================================
+// REPOSITIONFLOW - FRONTEND APPLICATION
+// Modern Dark Theme with Real-time Updates
+// ==========================================
+
+// Global State
 const state = {
     user: null,
     ws: null,
     tasks: [],
-    currentTask: null,
-    cronometroInterval: null,
-    cronometroStartTime: null,
-    cronotrometroPausedTime: 0
+    currentView: 'dashboard',
+    charts: {},
+    timers: {}
 };
 
-// API Base URL
-const API_BASE = window.location.origin;
-const WS_BASE = window.location.origin.replace('http', 'ws');
+// ==========================================
+// INITIALIZATION
+// ==========================================
 
-// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
 function initializeApp() {
-    console.log('=== INICIALIZANDO APLICAÇÃO ===');
+    // Check if user is already logged in
+    const savedUser = localStorage.getItem('repositionflow_user');
+    if (savedUser) {
+        state.user = JSON.parse(savedUser);
+        showMainApp();
+        connectWebSocket();
+    } else {
+        showRoleSelection();
+    }
 
-    // Event listeners do login
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    setupEventListeners();
+}
 
-    // Event listeners de navegação - DIRETO em cada botão
-    setupNavigation();
+// ==========================================
+// AUTHENTICATION
+// ==========================================
 
-    document.querySelector('.logout-btn')?.addEventListener('click', handleLogout);
+function setupEventListeners() {
+    // Role Selection Form
+    document.getElementById('roleForm')?.addEventListener('submit', handleRoleSubmit);
 
-    // Event listeners de formulários
-    document.getElementById('uploadForm')?.addEventListener('submit', handleUpload);
-    document.getElementById('planilha')?.addEventListener('change', handleFileSelect);
-
-    // Event listeners de filtros
-    document.getElementById('filterStatus')?.addEventListener('change', loadTasks);
-    document.getElementById('filterAtendente')?.addEventListener('input', debounce(loadTasks, 500));
-    document.getElementById('btnRefresh')?.addEventListener('click', loadTasks);
-
-    // Event listeners de métricas
-    document.getElementById('periodFilter')?.addEventListener('change', loadMetrics);
-    document.getElementById('btnExportCSV')?.addEventListener('click', exportCSV);
-
-    // Event listener do modal
-    document.querySelector('.close')?.addEventListener('click', closeTaskModal);
-    window.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) {
-            closeTaskModal();
-        }
+    // Admin Login Form
+    document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+    document.getElementById('btnBackToRole')?.addEventListener('click', () => {
+        hideElement('adminLoginScreen');
+        showElement('roleSelectionScreen');
     });
 
-    console.log('Inicialização completa');
+    // Logout
+    document.getElementById('btnLogout')?.addEventListener('click', handleLogout);
+
+    // Navigation
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view;
+            if (view) switchView(view);
+        });
+    });
+
+    // Dashboard
+    document.getElementById('btnRefresh')?.addEventListener('click', loadTasks);
+    document.getElementById('filterStatus')?.addEventListener('change', loadTasks);
+    document.getElementById('filterAtendente')?.addEventListener('input', debounce(loadTasks, 500));
+
+    // Upload Form
+    document.getElementById('uploadForm')?.addEventListener('submit', handleUploadForm);
+
+    // Metrics Filter
+    document.getElementById('metricsFilter')?.addEventListener('change', loadMetrics);
+
+    // Modal
+    document.getElementById('closeModal')?.addEventListener('click', closeModal);
+    document.getElementById('taskModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'taskModal') closeModal();
+    });
 }
 
-// Setup de navegação com listeners diretos
-function setupNavigation() {
-    console.log('=== CONFIGURANDO NAVEGAÇÃO ===');
-
-    // Botão Dashboard
-    const btnDashboard = document.querySelector('[data-view="dashboard"]');
-    if (btnDashboard) {
-        btnDashboard.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('>>> CLICK: Dashboard');
-            switchView('dashboard');
-        });
-        console.log('✓ Listener Dashboard adicionado');
-    }
-
-    // Botão Nova Requisição
-    const btnNovaRequisicao = document.getElementById('novaTarefaBtn');
-    if (btnNovaRequisicao) {
-        btnNovaRequisicao.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('>>> CLICK: Nova Requisição');
-            switchView('nova-requisicao');
-        });
-        console.log('✓ Listener Nova Requisição adicionado');
-    } else {
-        console.error('✗ Botão Nova Requisição não encontrado!');
-    }
-
-    // Botão Métricas
-    const btnMetricas = document.getElementById('metricasBtn');
-    if (btnMetricas) {
-        btnMetricas.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('>>> CLICK: Métricas');
-            switchView('metricas');
-        });
-        console.log('✓ Listener Métricas adicionado');
-    } else {
-        console.error('✗ Botão Métricas não encontrado!');
-    }
-}
-
-// Login
-async function handleLogin(e) {
+async function handleRoleSubmit(e) {
     e.preventDefault();
+    const name = document.getElementById('userName').value.trim();
+    const role = document.getElementById('userRole').value;
 
-    const userName = document.getElementById('userName').value.trim();
-    const userRole = document.getElementById('userRole').value;
-
-    if (!userName || !userRole) {
-        showNotification('Por favor, preencha todos os campos', 'error');
+    if (!name || !role) {
+        showToast('Preencha todos os campos', 'error');
         return;
     }
 
-    state.user = { name: userName, role: userRole };
-
-    // Conectar ao WebSocket
-    connectWebSocket();
-
-    // Mostrar interface
-    document.getElementById('loginModal').classList.remove('active');
-    document.getElementById('mainNav').classList.remove('hidden');
-    document.querySelector('.user-info').textContent = `${userName} (${userRole})`;
-
-    // Configurar visibilidade dos botões baseado no papel
-    const novaTarefaBtn = document.getElementById('novaTarefaBtn');
-    const metricasBtn = document.getElementById('metricasBtn');
-
-    console.log('Configurando visibilidade para papel:', userRole);
-    console.log('Botão Nova Tarefa encontrado:', novaTarefaBtn);
-    console.log('Botão Métricas encontrado:', metricasBtn);
-
-    if (userRole === 'atendente') {
-        novaTarefaBtn.classList.remove('hidden');
-        metricasBtn.classList.add('hidden');
-        console.log('Atendente: Nova Tarefa visível, Métricas oculto');
-    } else if (userRole === 'separador') {
-        novaTarefaBtn.classList.add('hidden');
-        metricasBtn.classList.add('hidden');
-        console.log('Separador: Ambos ocultos');
-    } else {
-        novaTarefaBtn.classList.remove('hidden');
-        metricasBtn.classList.remove('hidden');
-        console.log('Admin: Ambos visíveis');
+    // Se for admin, mostrar tela de login
+    if (role === 'admin') {
+        hideElement('roleSelectionScreen');
+        showElement('adminLoginScreen');
+        return;
     }
 
-    // Verificar classes após mudança
-    console.log('Classes do botão Nova Tarefa:', novaTarefaBtn.className);
-    console.log('Classes do botão Métricas:', metricasBtn.className);
+    // Para atendente e separador, entrar direto
+    state.user = { name, role };
+    localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
-    // Mostrar dashboard
+    hideElement('roleSelectionScreen');
+    showMainApp();
+    connectWebSocket();
+}
+
+async function handleAdminLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('adminUsername').value.trim();
+    const password = document.getElementById('adminPassword').value;
+
+    try {
+        const response = await fetch('/api/auth/admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const name = document.getElementById('userName').value.trim();
+            state.user = { name, role: 'admin', token: data.token };
+            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+
+            hideElement('adminLoginScreen');
+            showMainApp();
+            connectWebSocket();
+        } else {
+            showElement('adminLoginError');
+            document.getElementById('adminLoginError').textContent = data.error || 'Credenciais inválidas';
+        }
+    } catch (error) {
+        console.error('Erro no login admin:', error);
+        showToast('Erro ao autenticar. Tente novamente.', 'error');
+    }
+}
+
+function handleLogout() {
+    if (state.ws) state.ws.close();
+    localStorage.removeItem('repositionflow_user');
+    state.user = null;
+    state.tasks = [];
+
+    // Destroy all charts
+    Object.values(state.charts).forEach(chart => chart.destroy());
+    state.charts = {};
+
+    hideElement('mainApp');
+    showElement('roleSelectionScreen');
+
+    // Reset forms
+    document.getElementById('roleForm').reset();
+    document.getElementById('adminLoginForm')?.reset();
+}
+
+function showMainApp() {
+    hideElement('roleSelectionScreen');
+    hideElement('adminLoginScreen');
+    showElement('mainApp');
+
+    // Update user display
+    const roleEmoji = {
+        'atendente': '👤',
+        'separador': '📋',
+        'admin': '👑'
+    };
+    document.getElementById('userDisplay').textContent =
+        `${roleEmoji[state.user.role]} ${state.user.name}`;
+
+    // Show/hide navigation based on role
+    if (state.user.role === 'atendente' || state.user.role === 'admin') {
+        showElement('novaTarefaBtn');
+    }
+    if (state.user.role === 'admin') {
+        showElement('metricasBtn');
+        showElement('adminDashboardBtn');
+    }
+
+    // Load initial data
     switchView('dashboard');
     loadTasks();
 }
 
-function handleLogout() {
-    if (state.ws) {
-        state.ws.close();
-    }
-
-    state.user = null;
-    state.tasks = [];
-    state.currentTask = null;
-
-    document.getElementById('loginModal').classList.add('active');
-    document.getElementById('mainNav').classList.add('hidden');
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-
-    // Limpar formulário
-    document.getElementById('loginForm').reset();
+function showRoleSelection() {
+    showElement('roleSelectionScreen');
+    hideElement('adminLoginScreen');
+    hideElement('mainApp');
 }
 
-// WebSocket
+// ==========================================
+// WEBSOCKET CONNECTION
+// ==========================================
+
 function connectWebSocket() {
-    state.ws = new WebSocket(WS_BASE);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+
+    state.ws = new WebSocket(wsUrl);
 
     state.ws.onopen = () => {
         console.log('WebSocket conectado');
-        // Registrar usuário
         state.ws.send(JSON.stringify({
             type: 'register',
             name: state.user.name,
@@ -193,112 +219,81 @@ function connectWebSocket() {
 
     state.ws.onerror = (error) => {
         console.error('Erro WebSocket:', error);
-        showNotification('Erro de conexão em tempo real', 'error');
     };
 
     state.ws.onclose = () => {
-        console.log('WebSocket desconectado');
-        // Tentar reconectar após 5 segundos
+        console.log('WebSocket desconectado. Reconectando em 5s...');
         setTimeout(() => {
-            if (state.user) {
-                connectWebSocket();
-            }
+            if (state.user) connectWebSocket();
         }, 5000);
     };
 }
 
 function handleWebSocketMessage(data) {
-    console.log('Mensagem WebSocket:', data);
+    console.log('WebSocket message:', data);
 
     switch (data.type) {
         case 'registered':
-            showNotification('Conectado ao sistema em tempo real', 'success');
+            console.log('Registrado no servidor');
             break;
 
         case 'new_task':
             if (state.user.role === 'separador') {
-                showNotification(`Nova tarefa: ${data.task.nomeLoja} - ${data.task.totalItems} itens`, 'success');
+                showToast(`Nova tarefa disponível! ${data.task.totalItems} itens`, 'success');
                 playNotificationSound();
             }
             loadTasks();
             break;
 
         case 'task_started':
-            showNotification(`Separação iniciada por ${data.nomeSeparador}`, 'success');
-            loadTasks();
-            if (state.currentTask && state.currentTask.id === data.taskId) {
-                loadTaskDetails(data.taskId);
-            }
-            break;
-
         case 'task_paused':
-            showNotification('Separação pausada', 'warning');
-            if (state.currentTask && state.currentTask.id === data.taskId) {
-                loadTaskDetails(data.taskId);
-            }
-            break;
-
         case 'task_resumed':
-            showNotification('Separação retomada', 'success');
-            if (state.currentTask && state.currentTask.id === data.taskId) {
-                loadTaskDetails(data.taskId);
-            }
-            break;
-
         case 'task_completed':
-            showNotification(`Separação concluída em ${data.duration}`, 'success');
-            loadTasks();
-            if (state.currentTask && state.currentTask.id === data.taskId) {
-                loadTaskDetails(data.taskId);
-            }
-            break;
-
         case 'item_updated':
-            if (state.currentTask && state.currentTask.id === data.taskId) {
-                loadTaskDetails(data.taskId);
-            }
+            loadTasks();
             break;
     }
 }
 
-// Navegação
-function switchView(viewName) {
-    console.log('Mudando para view:', viewName);
+// ==========================================
+// VIEW MANAGEMENT
+// ==========================================
 
-    // Ocultar todas as views (adicionar hidden, remover active)
-    document.querySelectorAll('.view').forEach(v => {
-        v.classList.remove('active');
-        v.classList.add('hidden');
+function switchView(viewName) {
+    // Update navigation
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.view === viewName) {
+            btn.classList.add('active');
+        }
     });
 
-    // Desativar todos os botões
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    // Hide all views
+    document.querySelectorAll('.view').forEach(view => {
+        view.classList.add('hidden');
+    });
 
-    const viewElement = document.getElementById(viewName);
-    const navButton = document.querySelector(`[data-view="${viewName}"]`);
+    // Show selected view
+    const targetView = document.getElementById(viewName);
+    if (targetView) {
+        targetView.classList.remove('hidden');
+        state.currentView = viewName;
 
-    console.log('View element encontrado:', viewElement);
-    console.log('Nav button encontrado:', navButton);
-
-    if (viewElement) {
-        // IMPORTANTE: Remover hidden E adicionar active
-        viewElement.classList.remove('hidden');
-        viewElement.classList.add('active');
-        console.log('✓ View mostrada:', viewName, '| Classes:', viewElement.className);
-    } else {
-        console.error('View não encontrada:', viewName);
-    }
-
-    if (navButton) {
-        navButton.classList.add('active');
-    }
-
-    if (viewName === 'metricas') {
-        loadMetrics();
+        // Load view-specific data
+        if (viewName === 'dashboard') {
+            loadTasks();
+        } else if (viewName === 'metricas') {
+            loadMetrics();
+        } else if (viewName === 'admin-dashboard') {
+            loadAdminDashboard();
+        }
     }
 }
 
-// Tarefas
+// ==========================================
+// DASHBOARD - TASK LIST
+// ==========================================
+
 async function loadTasks() {
     try {
         const status = document.getElementById('filterStatus')?.value || '';
@@ -308,400 +303,268 @@ async function loadTasks() {
         if (status) params.append('status', status);
         if (atendente) params.append('atendente', atendente);
 
-        const response = await fetch(`${API_BASE}/api/tasks?${params}`);
+        const response = await fetch(`/api/tasks?${params}`);
         const tasks = await response.json();
 
         state.tasks = tasks;
         renderTasks(tasks);
-        updateStats(tasks);
+        updateDashboardStats(tasks);
     } catch (error) {
         console.error('Erro ao carregar tarefas:', error);
-        showNotification('Erro ao carregar tarefas', 'error');
+        showToast('Erro ao carregar tarefas', 'error');
     }
+}
+
+function updateDashboardStats(tasks) {
+    const pendentes = tasks.filter(t => t.status === 'PENDENTE').length;
+    const emSeparacao = tasks.filter(t => t.status === 'EM_SEPARACAO').length;
+    const concluidas = tasks.filter(t => t.status === 'CONCLUIDO').length;
+
+    document.getElementById('statPendente').textContent = pendentes;
+    document.getElementById('statEmSeparacao').textContent = emSeparacao;
+    document.getElementById('statConcluido').textContent = concluidas;
 }
 
 function renderTasks(tasks) {
-    const taskList = document.getElementById('taskList');
+    const container = document.getElementById('taskList');
 
     if (tasks.length === 0) {
-        taskList.innerHTML = '<p class="empty-state">Nenhuma tarefa encontrada</p>';
+        container.innerHTML = `
+            <div class="glass-card text-center">
+                <p style="color: var(--text-secondary);">Nenhuma tarefa encontrada</p>
+            </div>
+        `;
         return;
     }
 
-    taskList.innerHTML = tasks.map(task => `
-        <div class="task-card status-${task.status}" onclick="openTaskModal('${task.id}')">
-            <div class="task-header">
+    container.innerHTML = tasks.map(task => createTaskCard(task)).join('');
+
+    // Add click listeners
+    tasks.forEach(task => {
+        const card = document.getElementById(`task-${task.id}`);
+        if (card) {
+            card.addEventListener('click', () => openTaskModal(task.id));
+        }
+    });
+}
+
+function createTaskCard(task) {
+    const statusColors = {
+        'PENDENTE': 'warning',
+        'EM_SEPARACAO': 'info',
+        'CONCLUIDO': 'success'
+    };
+
+    const statusLabels = {
+        'PENDENTE': '🟡 Pendente',
+        'EM_SEPARACAO': '🔵 Em Separação',
+        'CONCLUIDO': '🟢 Concluído'
+    };
+
+    const prioridadeColors = {
+        'Baixa': 'success',
+        'Média': 'warning',
+        'Alta': 'danger'
+    };
+
+    return `
+        <div id="task-${task.id}" class="glass-card" style="cursor: pointer; transition: all 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
                 <div>
-                    <div class="task-id">#${task.id.substring(0, 8)}</div>
-                    <div><strong>${task.nomeAtendente}</strong> - ${task.uniqueSkus} SKUs (${task.totalItems} itens)</div>
+                    <h3 style="margin-bottom: 0.5rem;">Tarefa #${task.id.substring(0, 8)}</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        👤 ${task.nomeAtendente}
+                        ${task.nomeSeparador ? ` • 📋 ${task.nomeSeparador}` : ''}
+                    </p>
                 </div>
-                <span class="task-status status-${task.status}">${task.status.replace('_', ' ')}</span>
+                <div style="display: flex; gap: 0.5rem; flex-direction: column; align-items: flex-end;">
+                    <span class="badge badge-${statusColors[task.status]}">${statusLabels[task.status]}</span>
+                    <span class="badge badge-${prioridadeColors[task.prioridade]}">${task.prioridade}</span>
+                </div>
             </div>
-            <div class="task-info">
-                <div class="task-info-item">
-                    <span class="task-info-label">Prioridade:</span> ${task.prioridade}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem;">
+                <div>
+                    <div style="color: var(--text-secondary); font-size: 0.85rem;">SKUs Únicos</div>
+                    <div style="font-size: 1.5rem; font-weight: 600;">${task.uniqueSkus}</div>
                 </div>
-                <div class="task-info-item">
-                    <span class="task-info-label">Criado:</span> ${formatDate(task.createdAt)}
+                <div>
+                    <div style="color: var(--text-secondary); font-size: 0.85rem;">Total de Itens</div>
+                    <div style="font-size: 1.5rem; font-weight: 600;">${task.totalItems}</div>
                 </div>
-                ${task.nomeSeparador ? `
-                    <div class="task-info-item">
-                        <span class="task-info-label">Separador:</span> ${task.nomeSeparador}
-                    </div>
-                ` : ''}
                 ${task.durationFormatted ? `
-                    <div class="task-info-item">
-                        <span class="task-info-label">Duração:</span> ${task.durationFormatted}
-                    </div>
+                <div>
+                    <div style="color: var(--text-secondary); font-size: 0.85rem;">Duração</div>
+                    <div style="font-size: 1.5rem; font-weight: 600;">${task.durationFormatted}</div>
+                </div>
                 ` : ''}
+            </div>
+            <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+                📅 ${new Date(task.createdAt).toLocaleString('pt-BR')}
             </div>
         </div>
-    `).join('');
+    `;
 }
 
-function updateStats(tasks) {
-    const pendente = tasks.filter(t => t.status === 'PENDENTE').length;
-    const emSeparacao = tasks.filter(t => t.status === 'EM_SEPARACAO').length;
-    const concluido = tasks.filter(t => t.status === 'CONCLUIDO').length;
+// ==========================================
+// TASK MODAL
+// ==========================================
 
-    document.getElementById('statPendente').textContent = pendente;
-    document.getElementById('statEmSeparacao').textContent = emSeparacao;
-    document.getElementById('statConcluido').textContent = concluido;
-}
-
-// Upload de planilha
-function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        showNotification(`Arquivo selecionado: ${file.name}`, 'success');
-    }
-}
-
-async function handleUpload(e) {
-    e.preventDefault();
-
-    const nomeAtendente = document.getElementById('nomeAtendente').value.trim();
-    const prioridade = document.getElementById('prioridade').value;
-    const planilha = document.getElementById('planilha').files[0];
-
-    if (!nomeAtendente || !planilha) {
-        showNotification('Por favor, preencha todos os campos', 'error');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('nomeAtendente', nomeAtendente);
-    formData.append('prioridade', prioridade);
-    formData.append('planilha', planilha);
-
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks`, {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showNotification(
-                `Tarefa criada com sucesso! ${result.summary.uniqueSkus} SKUs únicos, ${result.summary.totalItems} itens totais`,
-                'success'
-            );
-            document.getElementById('uploadForm').reset();
-            switchView('dashboard');
-            loadTasks();
-        } else {
-            showNotification(result.error || 'Erro ao criar tarefa', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao enviar planilha:', error);
-        showNotification('Erro ao enviar planilha', 'error');
-    }
-}
-
-// Modal de detalhes da tarefa
 async function openTaskModal(taskId) {
-    state.currentTask = state.tasks.find(t => t.id === taskId);
-    await loadTaskDetails(taskId);
-    document.getElementById('taskModal').classList.add('active');
-}
-
-async function loadTaskDetails(taskId) {
     try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`);
+        const response = await fetch(`/api/tasks/${taskId}`);
         const task = await response.json();
 
-        state.currentTask = task;
-        renderTaskDetails(task);
+        renderTaskModal(task);
+        document.getElementById('taskModal').classList.add('active');
 
-        // Iniciar cronômetro se estiver em separação
+        // Start timer if task is in progress
         if (task.status === 'EM_SEPARACAO') {
-            startCronometro(task);
+            startTaskTimer(task);
         }
     } catch (error) {
         console.error('Erro ao carregar detalhes:', error);
-        showNotification('Erro ao carregar detalhes da tarefa', 'error');
+        showToast('Erro ao carregar detalhes da tarefa', 'error');
     }
 }
 
-function renderTaskDetails(task) {
-    const detailsContainer = document.getElementById('taskDetails');
+function renderTaskModal(task) {
+    const canControl = state.user.role === 'separador' &&
+                      (task.status === 'PENDENTE' || task.status === 'EM_SEPARACAO');
 
-    const isSeparador = state.user.role === 'separador';
-    const canStart = task.status === 'PENDENTE' && isSeparador;
-    const canControl = task.status === 'EM_SEPARACAO' && isSeparador && task.nomeSeparador === state.user.name;
+    document.getElementById('modalTaskTitle').textContent = `Tarefa #${task.id.substring(0, 8)}`;
 
-    detailsContainer.innerHTML = `
-        <h2>Tarefa #${task.id.substring(0, 8)}</h2>
-        <div class="task-status status-${task.status}">${task.status.replace('_', ' ')}</div>
-
-        <div class="task-info" style="margin: 20px 0;">
-            <div class="task-info-item">
-                <span class="task-info-label">Atendente:</span> ${task.nomeAtendente}
+    let content = `
+        <div style="margin-bottom: 2rem;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <strong>Atendente:</strong> ${task.nomeAtendente}
+                </div>
+                <div>
+                    <strong>Prioridade:</strong> ${task.prioridade}
+                </div>
+                <div>
+                    <strong>Status:</strong> <span class="badge badge-info">${task.status}</span>
+                </div>
+                <div>
+                    <strong>Criado em:</strong> ${new Date(task.createdAt).toLocaleString('pt-BR')}
+                </div>
             </div>
-            <div class="task-info-item">
-                <span class="task-info-label">Prioridade:</span> ${task.prioridade}
-            </div>
-            <div class="task-info-item">
-                <span class="task-info-label">Criado em:</span> ${formatDate(task.createdAt)}
-            </div>
-            ${task.nomeSeparador ? `
-                <div class="task-info-item">
-                    <span class="task-info-label">Separador:</span> ${task.nomeSeparador}
+            ${task.nomeSeparador ? `<div><strong>Separador:</strong> ${task.nomeSeparador}</div>` : ''}
+            ${task.status === 'EM_SEPARACAO' ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                    <strong>⏱️ Tempo decorrido:</strong>
+                    <span id="taskTimer" style="font-size: 1.5rem; font-weight: 700; color: var(--accent-green);">00:00:00</span>
+                </div>
+            ` : ''}
+            ${task.durationFormatted ? `
+                <div style="margin-top: 1rem;">
+                    <strong>✓ Tempo total:</strong> ${task.durationFormatted}
                 </div>
             ` : ''}
         </div>
 
-        ${task.status === 'EM_SEPARACAO' ? `
-            <div class="cronometro">
-                <h3>Tempo de Separação</h3>
-                <div class="cronometro-display" id="cronometroDisplay">00:00:00</div>
-                ${canControl ? `
-                    <div class="cronometro-controls">
-                        ${task.isPaused ? `
-                            <button class="btn btn-success" onclick="resumeTask('${task.id}')">Retomar</button>
-                        ` : `
-                            <button class="btn btn-warning" onclick="pauseTask('${task.id}')">Pausar</button>
-                        `}
-                        <button class="btn btn-primary" onclick="completeTask('${task.id}')">Concluir</button>
-                    </div>
+        <!-- Control Buttons -->
+        ${canControl ? `
+            <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+                ${task.status === 'PENDENTE' ? `
+                    <button class="btn btn-primary" onclick="startTask('${task.id}')">
+                        ▶️ Iniciar Separação
+                    </button>
+                ` : ''}
+                ${task.status === 'EM_SEPARACAO' && !task.isPaused ? `
+                    <button class="btn btn-secondary" onclick="pauseTask('${task.id}')">
+                        ⏸️ Pausar
+                    </button>
+                    <button class="btn btn-primary" onclick="completeTask('${task.id}')">
+                        ✓ Concluir
+                    </button>
+                ` : ''}
+                ${task.status === 'EM_SEPARACAO' && task.isPaused ? `
+                    <button class="btn btn-primary" onclick="resumeTask('${task.id}')">
+                        ▶️ Retomar
+                    </button>
                 ` : ''}
             </div>
         ` : ''}
 
-        ${task.status === 'CONCLUIDO' ? `
-            <div class="cronometro">
-                <h3>Tempo Total</h3>
-                <div class="cronometro-display">${task.durationFormatted || '00:00:00'}</div>
-            </div>
-        ` : ''}
-
-        ${canStart ? `
-            <button class="btn btn-primary" onclick="startTask('${task.id}')">Iniciar Separação</button>
-        ` : ''}
-
-        <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 10px 0;">
-            <h3 style="margin: 0;">Itens (${task.items.length})</h3>
-            <button class="btn btn-secondary" onclick="exportTaskToExcel('${task.id}')" style="width: auto; padding: 10px 20px;">
-                📥 Exportar XLSX
+        <!-- Export Button -->
+        <div style="margin-bottom: 2rem;">
+            <button class="btn btn-secondary" onclick="exportTaskToExcel('${task.id}')">
+                📥 Exportar para Excel
             </button>
         </div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th>SKU</th>
-                    <th>Descrição</th>
-                    <th>Qtd Pegar</th>
-                    <th>Localização</th>
-                    <th>Estoque Disp.</th>
-                    ${canControl ? '<th>Status</th>' : ''}
-                    ${task.status === 'CONCLUIDO' ? '<th>Status</th>' : ''}
-                    ${canControl ? '<th>Ações</th>' : ''}
-                </tr>
-            </thead>
-            <tbody>
-                ${task.items.map(item => `
-                    <tr>
-                        <td><strong>${item.sku}</strong></td>
-                        <td>${item.descricao}</td>
-                        <td><strong>${item.quantidade_pegar}</strong></td>
-                        <td><small>${item.localizacao}</small></td>
-                        <td>${item.total_disponivel || '-'}</td>
-                        ${canControl || task.status === 'CONCLUIDO' ? `
-                            <td>
-                                ${item.status_separacao === 'OK' ? '<span class="item-status-ok">OK</span>' : ''}
-                                ${item.status_separacao === 'FALTANDO' ? '<span class="item-status-faltando">FALTANDO</span>' : ''}
-                                ${!item.status_separacao ? '-' : ''}
-                            </td>
-                        ` : ''}
-                        ${canControl ? `
-                            <td class="item-actions">
-                                <button class="btn btn-success" onclick="markItem('${task.id}', '${item.sku}', 'OK')">OK</button>
-                                <button class="btn btn-danger" onclick="markItem('${task.id}', '${item.sku}', 'FALTANDO')">Falta</button>
-                            </td>
-                        ` : ''}
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
 
-        <h3>Histórico</h3>
-        <div class="timeline">
-            ${task.timeline.map(item => `
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <div class="timeline-action">${item.action} - ${item.user}</div>
-                        <div class="timeline-time">${formatDate(item.timestamp)}</div>
-                    </div>
-                </div>
-            `).join('')}
+        <!-- Items Table -->
+        <h3 style="margin-bottom: 1rem;">Itens (${task.items.length})</h3>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Descrição</th>
+                        <th>Qtd</th>
+                        <th>Localização</th>
+                        <th>Disponível</th>
+                        ${canControl || task.status === 'CONCLUIDO' ? '<th>Status</th>' : ''}
+                        ${canControl ? '<th>Ações</th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${task.items.map(item => `
+                        <tr>
+                            <td><code>${item.sku}</code></td>
+                            <td>${item.descricao}</td>
+                            <td><strong>${item.quantidade_pegar}</strong></td>
+                            <td><small>${item.localizacao}</small></td>
+                            <td>${item.total_disponivel || '-'}</td>
+                            ${canControl || task.status === 'CONCLUIDO' ? `
+                                <td>
+                                    ${item.status_separacao === 'OK' ? '<span class="badge badge-success">OK</span>' : ''}
+                                    ${item.status_separacao === 'FALTANDO' ? '<span class="badge badge-danger">FALTANDO</span>' : ''}
+                                    ${!item.status_separacao ? '-' : ''}
+                                </td>
+                            ` : ''}
+                            ${canControl ? `
+                                <td>
+                                    <button class="btn btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" onclick="markItem('${task.id}', '${item.sku}', 'OK')">OK</button>
+                                    <button class="btn btn-danger" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" onclick="markItem('${task.id}', '${item.sku}', 'FALTANDO')">Falta</button>
+                                </td>
+                            ` : ''}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
 
-        ${task.pausas && task.pausas.length > 0 ? `
-            <h3>Pausas (${task.pausas.length})</h3>
-            <ul>
-                ${task.pausas.map(p => `
-                    <li>
-                        ${formatDate(p.inicio)} - ${formatDate(p.fim)}
-                        (${Math.floor(p.duracao / 60)}min ${Math.floor(p.duracao % 60)}s)
-                    </li>
+        <!-- Timeline -->
+        ${task.timeline && task.timeline.length > 0 ? `
+            <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Histórico</h3>
+            <div style="border-left: 2px solid var(--border-color); padding-left: 1rem;">
+                ${task.timeline.map(event => `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: 600;">${event.action}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                            ${event.user} • ${new Date(event.timestamp).toLocaleString('pt-BR')}
+                        </div>
+                    </div>
                 `).join('')}
-            </ul>
+            </div>
         ` : ''}
     `;
+
+    document.getElementById('modalTaskContent').innerHTML = content;
 }
 
-function closeTaskModal() {
-    document.getElementById('taskModal').classList.remove('active');
-    stopCronometro();
-    state.currentTask = null;
-}
-
-// Ações de tarefa
-async function startTask(taskId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nomeSeparador: state.user.name })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showNotification('Separação iniciada!', 'success');
-            await loadTaskDetails(taskId);
-        } else {
-            showNotification(result.error || 'Erro ao iniciar separação', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao iniciar tarefa:', error);
-        showNotification('Erro ao iniciar separação', 'error');
-    }
-}
-
-async function pauseTask(taskId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/pause`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showNotification('Separação pausada', 'warning');
-            await loadTaskDetails(taskId);
-        } else {
-            showNotification(result.error || 'Erro ao pausar', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao pausar:', error);
-        showNotification('Erro ao pausar separação', 'error');
-    }
-}
-
-async function resumeTask(taskId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/resume`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showNotification('Separação retomada', 'success');
-            await loadTaskDetails(taskId);
-        } else {
-            showNotification(result.error || 'Erro ao retomar', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao retomar:', error);
-        showNotification('Erro ao retomar separação', 'error');
-    }
-}
-
-async function completeTask(taskId) {
-    if (!confirm('Tem certeza que deseja concluir esta separação?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/complete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showNotification(`Separação concluída em ${result.duration}!`, 'success');
-            closeTaskModal();
-            loadTasks();
-        } else {
-            showNotification(result.error || 'Erro ao concluir', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao concluir:', error);
-        showNotification('Erro ao concluir separação', 'error');
-    }
-}
-
-async function markItem(taskId, sku, status) {
-    try {
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/items/${encodeURIComponent(sku)}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            await loadTaskDetails(taskId);
-        } else {
-            showNotification('Erro ao atualizar item', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao marcar item:', error);
-        showNotification('Erro ao atualizar item', 'error');
-    }
-}
-
-// Cronômetro
-function startCronometro(task) {
-    stopCronometro();
-
-    if (task.isPaused) {
-        return;
+function startTaskTimer(task) {
+    // Clear existing timer
+    if (state.timers[task.id]) {
+        clearInterval(state.timers[task.id]);
     }
 
     const startTime = new Date(task.startTime).getTime();
-    const pauseTime = task.pausas ? task.pausas.reduce((sum, p) => sum + (p.duracao * 1000), 0) : 0;
+    const pauseTime = task.pausas ? task.pausas.reduce((sum, p) => sum + p.duracao * 1000, 0) : 0;
 
-    state.cronometroInterval = setInterval(() => {
+    state.timers[task.id] = setInterval(() => {
         const now = Date.now();
         const elapsed = now - startTime - pauseTime;
 
@@ -709,158 +572,508 @@ function startCronometro(task) {
         const minutes = Math.floor((elapsed % 3600000) / 60000);
         const seconds = Math.floor((elapsed % 60000) / 1000);
 
-        const display = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-        const displayElement = document.getElementById('cronometroDisplay');
-        if (displayElement) {
-            displayElement.textContent = display;
+        const timerEl = document.getElementById('taskTimer');
+        if (timerEl) {
+            timerEl.textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
     }, 1000);
 }
 
-function stopCronometro() {
-    if (state.cronometroInterval) {
-        clearInterval(state.cronometroInterval);
-        state.cronometroInterval = null;
+function closeModal() {
+    document.getElementById('taskModal').classList.remove('active');
+
+    // Clear all timers
+    Object.values(state.timers).forEach(timer => clearInterval(timer));
+    state.timers = {};
+}
+
+// ==========================================
+// TASK ACTIONS
+// ==========================================
+
+async function startTask(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomeSeparador: state.user.name })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Separação iniciada!', 'success');
+            closeModal();
+            loadTasks();
+        } else {
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao iniciar tarefa:', error);
+        showToast('Erro ao iniciar tarefa', 'error');
     }
 }
 
-// Métricas
+async function pauseTask(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/pause`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Separação pausada', 'success');
+            closeModal();
+            loadTasks();
+        }
+    } catch (error) {
+        console.error('Erro ao pausar tarefa:', error);
+        showToast('Erro ao pausar tarefa', 'error');
+    }
+}
+
+async function resumeTask(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/resume`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Separação retomada', 'success');
+            closeModal();
+            loadTasks();
+        }
+    } catch (error) {
+        console.error('Erro ao retomar tarefa:', error);
+        showToast('Erro ao retomar tarefa', 'error');
+    }
+}
+
+async function completeTask(taskId) {
+    if (!confirm('Deseja realmente concluir esta separação?')) return;
+
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/complete`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`Tarefa concluída! Tempo: ${data.duration}`, 'success');
+            closeModal();
+            loadTasks();
+        }
+    } catch (error) {
+        console.error('Erro ao concluir tarefa:', error);
+        showToast('Erro ao concluir tarefa', 'error');
+    }
+}
+
+async function markItem(taskId, sku, status) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/items/${sku}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`Item marcado como ${status}`, 'success');
+            openTaskModal(taskId); // Reload modal
+        }
+    } catch (error) {
+        console.error('Erro ao marcar item:', error);
+        showToast('Erro ao atualizar item', 'error');
+    }
+}
+
+async function exportTaskToExcel(taskId) {
+    try {
+        window.location.href = `/api/tasks/${taskId}/export-excel`;
+        showToast('Download iniciado!', 'success');
+    } catch (error) {
+        console.error('Erro ao exportar:', error);
+        showToast('Erro ao exportar', 'error');
+    }
+}
+
+// ==========================================
+// UPLOAD FORM
+// ==========================================
+
+async function handleUploadForm(e) {
+    e.preventDefault();
+
+    const nomeAtendente = document.getElementById('nomeAtendente').value.trim();
+    const prioridade = document.getElementById('prioridade').value;
+    const file = document.getElementById('planilhaFile').files[0];
+
+    if (!file) {
+        showToast('Selecione um arquivo', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('nomeAtendente', nomeAtendente);
+    formData.append('prioridade', prioridade);
+    formData.append('planilha', file);
+
+    try {
+        const response = await fetch('/api/tasks', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`Tarefa criada! ${data.summary.uniqueSkus} SKUs únicos, ${data.summary.totalItems} itens`, 'success');
+            document.getElementById('uploadForm').reset();
+            switchView('dashboard');
+        } else {
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao enviar planilha:', error);
+        showToast('Erro ao enviar planilha', 'error');
+    }
+}
+
+// ==========================================
+// METRICS VIEW
+// ==========================================
+
 async function loadMetrics() {
     try {
-        const periodo = document.getElementById('periodFilter')?.value || '';
-
+        const periodo = document.getElementById('metricsFilter')?.value || '';
         const params = new URLSearchParams();
         if (periodo) params.append('periodo', periodo);
 
-        const response = await fetch(`${API_BASE}/api/metrics?${params}`);
-        const metrics = await response.json();
+        const response = await fetch(`/api/metrics?${params}`);
+        const data = await response.json();
 
-        renderMetrics(metrics);
+        // Update stats
+        document.getElementById('metricTotalTarefas').textContent = data.totalTarefas;
+        document.getElementById('metricTempoMedio').textContent = formatSeconds(data.tempoMedio);
+
+        // Render ranking
+        renderRanking(data.rankingSeparadores);
+
+        // Render detailed stats
+        renderDetailedStats(data.porAtendente, data.porSeparador);
     } catch (error) {
         console.error('Erro ao carregar métricas:', error);
-        showNotification('Erro ao carregar métricas', 'error');
+        showToast('Erro ao carregar métricas', 'error');
     }
 }
 
-function renderMetrics(metrics) {
-    document.getElementById('metricTotal').textContent = metrics.totalTarefas;
-    document.getElementById('metricAvgTime').textContent = formatSeconds(metrics.tempoMedio);
+function renderRanking(ranking) {
+    const container = document.getElementById('rankingSeparadores');
 
-    // Ranking de separadores
-    const rankingContainer = document.getElementById('rankingSeparadores');
-    if (metrics.rankingSeparadores.length === 0) {
-        rankingContainer.innerHTML = '<p class="empty-state">Nenhum dado disponível</p>';
+    if (!ranking || ranking.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Nenhum dado disponível</p>';
+        return;
+    }
+
+    container.innerHTML = ranking.map((sep, index) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? '#cd7f32' : 'var(--text-secondary)'};">
+                    ${index + 1}°
+                </div>
+                <div>
+                    <div style="font-weight: 600;">${sep.nome}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${sep.count} tarefas</div>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 1.2rem; font-weight: 600; color: var(--accent-green);">
+                    ${formatSeconds(sep.avgTime)}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">tempo médio</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderDetailedStats(porAtendente, porSeparador) {
+    // Por Atendente
+    const atendenteContainer = document.getElementById('statsPorAtendente');
+    if (Object.keys(porAtendente).length === 0) {
+        atendenteContainer.innerHTML = '<p style="color: var(--text-secondary);">Nenhum dado</p>';
     } else {
-        rankingContainer.innerHTML = metrics.rankingSeparadores.map((sep, index) => `
-            <div class="ranking-item">
-                <span class="ranking-position">${index + 1}º</span>
-                <span class="ranking-name">${sep.nome}</span>
-                <span class="ranking-stats">
-                    ${sep.count} tarefa(s) | Média: ${formatSeconds(sep.avgTime)}
-                </span>
+        atendenteContainer.innerHTML = Object.entries(porAtendente).map(([nome, data]) => `
+            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                <div style="font-weight: 600; margin-bottom: 0.5rem;">${nome}</div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    ${data.count} tarefas • ${formatSeconds(data.totalTime)} total
+                </div>
             </div>
         `).join('');
     }
 
-    // Por atendente
-    const atendenteContainer = document.getElementById('metricsAtendente');
-    const atendenteData = Object.entries(metrics.porAtendente);
-    if (atendenteData.length === 0) {
-        atendenteContainer.innerHTML = '<p class="empty-state">Nenhum dado disponível</p>';
+    // Por Separador
+    const separadorContainer = document.getElementById('statsPorSeparador');
+    if (Object.keys(porSeparador).length === 0) {
+        separadorContainer.innerHTML = '<p style="color: var(--text-secondary);">Nenhum dado</p>';
     } else {
-        atendenteContainer.innerHTML = atendenteData.map(([nome, data]) => `
-            <div class="metric-item">
-                <span>${nome}</span>
-                <span>${data.count} tarefa(s) | Total: ${formatSeconds(data.totalTime)}</span>
-            </div>
-        `).join('');
-    }
-
-    // Por separador
-    const separadorContainer = document.getElementById('metricsSeparador');
-    const separadorData = Object.entries(metrics.porSeparador);
-    if (separadorData.length === 0) {
-        separadorContainer.innerHTML = '<p class="empty-state">Nenhum dado disponível</p>';
-    } else {
-        separadorContainer.innerHTML = separadorData.map(([nome, data]) => `
-            <div class="metric-item">
-                <span>${nome}</span>
-                <span>${data.count} tarefa(s) | Total: ${formatSeconds(data.totalTime)}</span>
+        separadorContainer.innerHTML = Object.entries(porSeparador).map(([nome, data]) => `
+            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                <div style="font-weight: 600; margin-bottom: 0.5rem;">${nome}</div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    ${data.count} tarefas • ${formatSeconds(data.totalTime / data.count)} médio
+                </div>
             </div>
         `).join('');
     }
 }
 
-async function exportCSV() {
+// ==========================================
+// ADMIN DASHBOARD
+// ==========================================
+
+async function loadAdminDashboard() {
     try {
-        window.open(`${API_BASE}/api/export/csv`, '_blank');
-        showNotification('Relatório exportado com sucesso', 'success');
+        const response = await fetch('/api/admin/dashboard');
+        const data = await response.json();
+
+        // Update stats
+        document.getElementById('adminStatTotal').textContent = data.stats.totalTarefas;
+        document.getElementById('adminStatPendentes').textContent = data.stats.tarefasPendentes;
+        document.getElementById('adminStatEmSeparacao').textContent = data.stats.tarefasEmSeparacao;
+        document.getElementById('adminStatConcluidas').textContent = data.stats.tarefasConcluidas;
+        document.getElementById('adminStatItens').textContent = data.stats.totalItens;
+        document.getElementById('adminStatTempoMedio').textContent = formatSeconds(data.stats.tempoMedioSeparacao);
+
+        // Render charts
+        renderAdminCharts(data);
+
+        // Render tables
+        renderAdminTables(data);
     } catch (error) {
-        console.error('Erro ao exportar:', error);
-        showNotification('Erro ao exportar relatório', 'error');
+        console.error('Erro ao carregar dashboard admin:', error);
+        showToast('Erro ao carregar dashboard', 'error');
     }
 }
 
-// Exportar tarefa para Excel
-async function exportTaskToExcel(taskId) {
-    try {
-        showNotification('Gerando arquivo Excel...', 'success');
+function renderAdminCharts(data) {
+    const chartColors = {
+        primary: '#7ee787',
+        secondary: '#58a6ff',
+        tertiary: '#ff6b35',
+        quaternary: '#d29922'
+    };
 
-        // Fazer download do arquivo
-        const response = await fetch(`${API_BASE}/api/tasks/${taskId}/export-excel`);
+    // Destroy existing charts
+    Object.values(state.charts).forEach(chart => chart.destroy());
+    state.charts = {};
 
-        if (!response.ok) {
-            throw new Error('Erro ao gerar arquivo');
+    // Chart 1: Top 5 Separadores - Total de Separações
+    const top5Separadores = data.separadores.slice(0, 5);
+    if (top5Separadores.length > 0) {
+        const ctx1 = document.getElementById('chartSeparadores');
+        state.charts.separadores = new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: top5Separadores.map(s => s.nome),
+                datasets: [{
+                    label: 'Total de Separações',
+                    data: top5Separadores.map(s => s.totalSeparacoes),
+                    backgroundColor: chartColors.primary,
+                    borderColor: chartColors.primary,
+                    borderWidth: 1
+                }]
+            },
+            options: getChartOptions('bar')
+        });
+    }
+
+    // Chart 2: Tempo Médio por Separador
+    if (top5Separadores.length > 0) {
+        const ctx2 = document.getElementById('chartTemposSeparadores');
+        state.charts.tempos = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: top5Separadores.map(s => s.nome),
+                datasets: [{
+                    label: 'Tempo Médio (minutos)',
+                    data: top5Separadores.map(s => (s.tempoMedio / 60).toFixed(1)),
+                    backgroundColor: 'rgba(88, 166, 255, 0.2)',
+                    borderColor: chartColors.secondary,
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: getChartOptions('line')
+        });
+    }
+
+    // Chart 3: Top 5 Atendentes - Listas
+    const top5Atendentes = data.atendentes.slice(0, 5);
+    if (top5Atendentes.length > 0) {
+        const ctx3 = document.getElementById('chartAtendentes');
+        state.charts.atendentes = new Chart(ctx3, {
+            type: 'doughnut',
+            data: {
+                labels: top5Atendentes.map(a => a.nome),
+                datasets: [{
+                    data: top5Atendentes.map(a => a.totalListas),
+                    backgroundColor: [
+                        chartColors.primary,
+                        chartColors.secondary,
+                        chartColors.tertiary,
+                        chartColors.quaternary,
+                        '#8b5cf6'
+                    ]
+                }]
+            },
+            options: getDoughnutChartOptions()
+        });
+    }
+
+    // Chart 4: Total de Itens por Atendente
+    if (top5Atendentes.length > 0) {
+        const ctx4 = document.getElementById('chartItensAtendentes');
+        state.charts.itens = new Chart(ctx4, {
+            type: 'bar',
+            data: {
+                labels: top5Atendentes.map(a => a.nome),
+                datasets: [{
+                    label: 'Total de Itens',
+                    data: top5Atendentes.map(a => a.totalItens),
+                    backgroundColor: chartColors.tertiary,
+                    borderColor: chartColors.tertiary,
+                    borderWidth: 1
+                }]
+            },
+            options: getChartOptions('bar')
+        });
+    }
+}
+
+function getChartOptions(type) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: type === 'line',
+                labels: {
+                    color: '#e6edf3',
+                    font: { size: 12 }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { color: '#7d8590' },
+                grid: { color: 'rgba(48, 54, 61, 0.5)' }
+            },
+            x: {
+                ticks: { color: '#7d8590' },
+                grid: { color: 'rgba(48, 54, 61, 0.5)' }
+            }
         }
+    };
+}
 
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `tarefa_${taskId.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+function getDoughnutChartOptions() {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: '#e6edf3',
+                    font: { size: 12 },
+                    padding: 15
+                }
+            }
+        }
+    };
+}
 
-        showNotification('Arquivo Excel baixado com sucesso!', 'success');
-    } catch (error) {
-        console.error('Erro ao exportar:', error);
-        showNotification('Erro ao exportar para Excel', 'error');
+function renderAdminTables(data) {
+    // Table Separadores
+    const tableSeparadores = document.getElementById('tableSeparadores');
+    if (data.separadores.length === 0) {
+        tableSeparadores.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Nenhum dado disponível</td></tr>';
+    } else {
+        tableSeparadores.innerHTML = data.separadores.map((sep, index) => `
+            <tr>
+                <td style="font-weight: 700; color: ${index < 3 ? 'var(--accent-green)' : 'inherit'};">${index + 1}</td>
+                <td>${sep.nome}</td>
+                <td>${sep.totalSeparacoes}</td>
+                <td>${sep.totalItens}</td>
+                <td>${sep.tempoMedioFormatado}</td>
+            </tr>
+        `).join('');
+    }
+
+    // Table Atendentes
+    const tableAtendentes = document.getElementById('tableAtendentes');
+    if (data.atendentes.length === 0) {
+        tableAtendentes.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Nenhum dado disponível</td></tr>';
+    } else {
+        tableAtendentes.innerHTML = data.atendentes.map((atd, index) => `
+            <tr>
+                <td style="font-weight: 700; color: ${index < 3 ? 'var(--accent-blue)' : 'inherit'};">${index + 1}</td>
+                <td>${atd.nome}</td>
+                <td>${atd.totalListas}</td>
+                <td>${atd.totalItens}</td>
+                <td>${atd.listasConcluidas}</td>
+            </tr>
+        `).join('');
     }
 }
 
-// Utilidades
-function showNotification(message, type = 'success') {
-    const container = document.getElementById('notifications');
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
+// ==========================================
+// UTILITIES
+// ==========================================
 
-    container.appendChild(notification);
+function showElement(id) {
+    document.getElementById(id)?.classList.remove('hidden');
+}
+
+function hideElement(id) {
+    document.getElementById(id)?.classList.add('hidden');
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 0.25rem;">
+            ${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'} ${type.toUpperCase()}
+        </div>
+        <div style="font-size: 0.9rem; color: var(--text-secondary);">${message}</div>
+    `;
+
+    const container = document.getElementById('toastContainer');
+    container.appendChild(toast);
 
     setTimeout(() => {
-        notification.remove();
+        toast.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
     }, 5000);
 }
 
-function playNotificationSound() {
-    // Som de notificação (opcional)
-    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGi56+ifUQ4PUKXh8LlkHgU7k9n0y3opByd6yPDck0MLFW2/7O2oWRQJPJXY8s17KwUpe8rx3I9DChVsvu3uqVwVCkCY3PLPfS4GK4DN8tqJNwgZaLvt559NEAxPpeLwtmMcBjiP1/DLeSsGJnfH7uCPQgsUXrHp66hVFApGnt/yvmwhBSqAzvHYijYIG2i56+mfUg4OTaPg77diHAU5kdP2y3srByd5xvDek0QOElSx6uihURcIT5rf8s1/MQYhcsPw2o5FDhJaq+vuqFoXCUKZ3vPOfDAGJHfG79uNQgwUW63o66lbFwlFnuH1vm4iByl+zPLaizsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcIT5ne88x+MAYicsPv2I5GDhJYq+zuqVoXCUKY3fLNfTEGJHXF79qLQgwUW63n7KlcGAlGnuH1vm4iByl9y/HajDsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcIT5ne88x+MAYicsPv2I5GDhJYq+zuqVoXCUKY3fLNfTEGJHXF79qLQgwUW63n7KlcGAlGnuH1vm4iByl9y/HajDsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcIT5ne88x+MAYicsPv2I5GDhJYq+zuqVoXCUKY3fLNfTEGJHXF79qLQgwUW63n7KlcGAlGnuH1vm4iByl9y/HajDsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcIT5ne88x+MAYicsPv2I5GDhJYq+zuqVoXCUKY3fLNfTEGJHXF79qLQgwUW63n7KlcGAlGnuH1vm4iByl9y/HajDsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcIT5ne88x+MAYicsPv2I5GDhJYq+zuqVoXCUKY3fLNfTEGJHXF79qLQgwUW63n7KlcGAlGnuH1vm4iByl9y/HajDsKFWe76+mgVBEMT6Dg8LdmHQY7lNjyy3grBid3xu/cjUQOElSw6uihURcI');
-    audio.play().catch(() => {});
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('pt-BR');
-}
-
 function formatSeconds(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    if (!seconds) return '00:00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
 function debounce(func, wait) {
@@ -873,4 +1086,27 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+function playNotificationSound() {
+    // Create a simple beep sound
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (error) {
+        console.log('Não foi possível reproduzir som de notificação');
+    }
 }

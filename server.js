@@ -88,6 +88,16 @@ function validateExcelColumns(worksheet) {
   };
 }
 
+// Helper: Buscar valor de coluna com múltiplas variações de nomes
+function getColumnValue(row, possibleNames) {
+  for (const name of possibleNames) {
+    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+      return row[name];
+    }
+  }
+  return null;
+}
+
 // Processar planilha Excel
 function processExcel(filePath) {
   const workbook = xlsx.readFile(filePath);
@@ -128,15 +138,43 @@ function processExcel(filePath) {
         row['Coluna prod alocado']
       ].filter(Boolean).join(' - ') || 'Não informado';
 
+      // Buscar estoque disponível com múltiplas variações
+      const estoqueDisponivel = getColumnValue(row, [
+        'Estoque Disponível',
+        'Estoque Disponivel',
+        'Total disponível',
+        'Total disponivel',
+        'Disponível',
+        'Disponivel',
+        'Qtd Disponível',
+        'Qtd Disponivel'
+      ]) || 0;
+
+      const totalFisico = getColumnValue(row, [
+        'Total Físico',
+        'Total físico',
+        'Total Fisico',
+        'Estoque Físico',
+        'Estoque físico',
+        'Estoque Fisico'
+      ]) || 0;
+
+      const totalAlocado = getColumnValue(row, [
+        'Total Alocado',
+        'Total alocado',
+        'Estoque Alocado',
+        'Estoque alocado'
+      ]) || 0;
+
       itemsMap.set(sku, {
         sku: sku,
         descricao: row['Desc Material'] || 'Sem descrição',
         quantidade_pegar: quantidadePegar,
         localizacao: localizacao,
-        // Informações de estoque (opcional)
-        total_fisico: row['Total físico'] || 0,
-        total_alocado: row['Total alocado'] || 0,
-        total_disponivel: row['Total disponivel'] || 0,
+        // Informações de estoque (opcional) - agora aceita múltiplas variações
+        total_fisico: totalFisico,
+        total_alocado: totalAlocado,
+        total_disponivel: estoqueDisponivel,
         // Localização detalhada (para referência)
         coluna: row['Coluna'] || '',
         estacao: row['Estacao'] || '',

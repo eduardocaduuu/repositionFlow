@@ -3,7 +3,13 @@
     "allow": [
       "Bash(git init)",
       "Bash(git remote add origin https://github.com/eduardocaduuu/repositionFlow.git)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(tree:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:www.koyeb.com)",
+      "Read(//c/**)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,3 +1,6 @@
+// Carregar variáveis de ambiente primeiro
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -7,6 +10,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const database = require('./database');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,10 +52,11 @@ const upload = multer({
   }
 });
 
-// Armazenamento em memória (para plano gratuito do Render)
-// Em produção, usar banco de dados
-let tasks = [];
-let users = []; // {id, name, role: 'atendente' | 'separador', ws}
+// Armazenamento
+// Sistema usa Firebase Firestore se configurado, caso contrário usa memória
+// O módulo database.js gerencia automaticamente o fallback
+let tasks = []; // Fallback: usado apenas se Firebase não estiver configurado
+let users = []; // {id, name, role: 'atendente' | 'separador', ws} - sempre em memória (sessões WebSocket)
 
 // Broadcast para todos os clientes conectados
 function broadcast(message, filterRole = null) {

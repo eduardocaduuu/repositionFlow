@@ -13,9 +13,33 @@ function initializeFirebase() {
       return null;
     }
 
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY
-      ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      : undefined;
+    // Processar private key - aceita tanto \n literal quanto quebras de linha reais
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (!privateKey) {
+      throw new Error('FIREBASE_PRIVATE_KEY não definida');
+    }
+
+    // Se a chave vier com aspas, remover
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1);
+    }
+    if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+      privateKey = privateKey.slice(1, -1);
+    }
+
+    // Substituir \n literal por quebra de linha real
+    privateKey = privateKey.replace(/\\n/g, '\n');
+
+    // Verificar se a chave tem o formato correto
+    if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+      throw new Error('FIREBASE_PRIVATE_KEY inválida - formato incorreto');
+    }
+
+    console.log('🔑 Configurando Firebase Admin SDK...');
+    console.log('   Project ID:', process.env.FIREBASE_PROJECT_ID);
+    console.log('   Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+    console.log('   Private Key:', privateKey.substring(0, 50) + '...');
 
     admin.initializeApp({
       credential: admin.credential.cert({
@@ -29,6 +53,7 @@ function initializeFirebase() {
     return admin.firestore();
   } catch (error) {
     console.error('❌ Erro ao conectar Firebase:', error.message);
+    console.error('Detalhes:', error);
     console.warn('⚠️  Usando armazenamento em memória como fallback.');
     return null;
   }

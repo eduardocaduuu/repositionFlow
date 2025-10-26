@@ -31,6 +31,12 @@ function initializeFirebase() {
     // Substituir \n literal por quebra de linha real
     privateKey = privateKey.replace(/\\n/g, '\n');
 
+    // CRÍTICO: Remover espaços/tabs no início de cada linha
+    privateKey = privateKey
+      .split('\n')
+      .map(line => line.trim())
+      .join('\n');
+
     // Verificar se a chave tem o formato correto
     if (!privateKey.includes('BEGIN PRIVATE KEY')) {
       throw new Error('FIREBASE_PRIVATE_KEY inválida - formato incorreto');
@@ -39,7 +45,7 @@ function initializeFirebase() {
     console.log('🔑 Configurando Firebase Admin SDK...');
     console.log('   Project ID:', process.env.FIREBASE_PROJECT_ID);
     console.log('   Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
-    console.log('   Private Key:', privateKey.substring(0, 50) + '...');
+    console.log('   Private Key: [REDACTED - primeiros chars]', privateKey.substring(0, 30) + '...');
 
     admin.initializeApp({
       credential: admin.credential.cert({

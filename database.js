@@ -127,8 +127,8 @@ class Database {
           query = query.where('nomeAtendente', '==', filters.nomeAtendente);
         }
 
-        // Ordenar por data de criação (mais recentes primeiro)
-        query = query.orderBy('createdAt', 'desc');
+        // NÃO adicionar orderBy aqui - causaria necessidade de índice composto
+        // Vamos ordenar em JavaScript após recuperar os dados
 
         console.log('🔄 [Firestore] Executando query...');
         const snapshot = await query.get();
@@ -146,7 +146,14 @@ class Database {
           tasks.push(data);
         });
 
-        console.log(`✅ [Firestore] ${tasks.length} tarefas recuperadas`);
+        // Ordenar por data de criação (mais recentes primeiro) em JavaScript
+        tasks.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateB - dateA; // DESC
+        });
+
+        console.log(`✅ [Firestore] ${tasks.length} tarefas recuperadas e ordenadas`);
         return tasks;
       } catch (error) {
         console.error('❌ [Firestore] Erro ao buscar tasks:', error.message);
@@ -164,6 +171,13 @@ class Database {
       if (filters.nomeAtendente) {
         tasks = tasks.filter(t => t.nomeAtendente.toLowerCase().includes(filters.nomeAtendente.toLowerCase()));
       }
+
+      // Ordenar em memória também
+      tasks.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
 
       console.log(`✅ [Memória] ${tasks.length} tarefas recuperadas`);
       return tasks;
@@ -258,33 +272,48 @@ class Database {
   // ==========================================
 
   async getCompletedTasks(filters = {}) {
-    const allTasks = await this.getAllTasks({ status: 'CONCLUIDO' });
+    try {
+      console.log('📈 [getCompletedTasks] Buscando tarefas concluídas com filtros:', filters);
 
-    // Aplicar filtros de período
-    if (filters.periodo) {
-      const now = new Date();
-      let startDate;
+      const allTasks = await this.getAllTasks({ status: 'CONCLUIDO' });
+      console.log(`📈 [getCompletedTasks] ${allTasks.length} tarefas concluídas encontradas`);
 
-      switch (filters.periodo) {
-        case 'dia':
-          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          break;
-        case 'semana':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'mes':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = null;
+      // Aplicar filtros de período
+      if (filters.periodo) {
+        const now = new Date();
+        let startDate;
+
+        switch (filters.periodo) {
+          case 'dia':
+            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+          case 'semana':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'mes':
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            startDate = null;
+        }
+
+        if (startDate) {
+          const filtered = allTasks.filter(t => {
+            if (!t.createdAt) return false;
+            return new Date(t.createdAt) >= startDate;
+          });
+          console.log(`📈 [getCompletedTasks] ${filtered.length} tarefas após filtro de período "${filters.periodo}"`);
+          return filtered;
+        }
       }
 
-      if (startDate) {
-        return allTasks.filter(t => new Date(t.createdAt) >= startDate);
-      }
+      console.log(`📈 [getCompletedTasks] Retornando todas as ${allTasks.length} tarefas`);
+      return allTasks;
+    } catch (error) {
+      console.error('❌ [getCompletedTasks] Erro:', error.message);
+      console.error('Stack:', error.stack);
+      throw error;
     }
-
-    return allTasks;
   }
 
   // ==========================================

@@ -925,18 +925,38 @@ async function loadMetrics() {
         const response = await fetch(`/api/metrics?${params}`);
         const data = await response.json();
 
+        // Se houver erro no backend, ainda renderizar estrutura vazia
+        const safeData = {
+            totalTarefas: data.totalTarefas || 0,
+            tempoMedio: data.tempoMedio || 0,
+            rankingSeparadores: data.rankingSeparadores || [],
+            porAtendente: data.porAtendente || {},
+            porSeparador: data.porSeparador || {}
+        };
+
         // Update stats
-        document.getElementById('metricTotalTarefas').textContent = data.totalTarefas;
-        document.getElementById('metricTempoMedio').textContent = formatSeconds(data.tempoMedio);
+        document.getElementById('metricTotalTarefas').textContent = safeData.totalTarefas;
+        document.getElementById('metricTempoMedio').textContent = formatSeconds(safeData.tempoMedio);
 
         // Render ranking
-        renderRanking(data.rankingSeparadores);
+        renderRanking(safeData.rankingSeparadores);
 
         // Render detailed stats
-        renderDetailedStats(data.porAtendente, data.porSeparador);
+        renderDetailedStats(safeData.porAtendente, safeData.porSeparador);
+
+        // Mostrar mensagem se houver erro do backend
+        if (data.error) {
+            showToast(data.error, 'error');
+        }
     } catch (error) {
         console.error('Erro ao carregar métricas:', error);
         showToast('Erro ao carregar métricas', 'error');
+
+        // Renderizar dados vazios em caso de erro
+        document.getElementById('metricTotalTarefas').textContent = '0';
+        document.getElementById('metricTempoMedio').textContent = '00:00:00';
+        renderRanking([]);
+        renderDetailedStats({}, {});
     }
 }
 
@@ -972,7 +992,7 @@ function renderRanking(ranking) {
 function renderDetailedStats(porAtendente, porSeparador) {
     // Por Atendente
     const atendenteContainer = document.getElementById('statsPorAtendente');
-    if (Object.keys(porAtendente).length === 0) {
+    if (!porAtendente || Object.keys(porAtendente).length === 0) {
         atendenteContainer.innerHTML = '<p style="color: var(--text-secondary);">Nenhum dado</p>';
     } else {
         atendenteContainer.innerHTML = Object.entries(porAtendente).map(([nome, data]) => `
@@ -987,7 +1007,7 @@ function renderDetailedStats(porAtendente, porSeparador) {
 
     // Por Separador
     const separadorContainer = document.getElementById('statsPorSeparador');
-    if (Object.keys(porSeparador).length === 0) {
+    if (!porSeparador || Object.keys(porSeparador).length === 0) {
         separadorContainer.innerHTML = '<p style="color: var(--text-secondary);">Nenhum dado</p>';
     } else {
         separadorContainer.innerHTML = Object.entries(porSeparador).map(([nome, data]) => `

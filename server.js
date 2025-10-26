@@ -749,9 +749,11 @@ app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), async (r
 // Obter métricas
 app.get('/api/metrics', async (req, res) => {
   try {
+    console.log('📊 GET /api/metrics - Buscando métricas...');
     const { periodo } = req.query; // 'dia', 'semana', 'mes'
 
     const filteredTasks = await database.getCompletedTasks({ periodo });
+    console.log(`✅ ${filteredTasks.length} tarefas concluídas encontradas`);
 
     // Tempo médio
     const avgTime = filteredTasks.length > 0
@@ -761,11 +763,13 @@ app.get('/api/metrics', async (req, res) => {
     // Por atendente
     const porAtendente = {};
     filteredTasks.forEach(t => {
-      if (!porAtendente[t.nomeAtendente]) {
-        porAtendente[t.nomeAtendente] = { count: 0, totalTime: 0 };
+      if (t.nomeAtendente) {
+        if (!porAtendente[t.nomeAtendente]) {
+          porAtendente[t.nomeAtendente] = { count: 0, totalTime: 0 };
+        }
+        porAtendente[t.nomeAtendente].count++;
+        porAtendente[t.nomeAtendente].totalTime += (t.activeTime || 0);
       }
-      porAtendente[t.nomeAtendente].count++;
-      porAtendente[t.nomeAtendente].totalTime += (t.activeTime || 0);
     });
 
     // Por separador
@@ -789,17 +793,35 @@ app.get('/api/metrics', async (req, res) => {
       }))
       .sort((a, b) => a.avgTime - b.avgTime);
 
-    res.json({
+    const response = {
       periodo: periodo || 'todos',
       totalTarefas: filteredTasks.length,
       tempoMedio: avgTime,
-      porAtendente,
-      porSeparador,
-      rankingSeparadores
+      porAtendente: porAtendente || {},
+      porSeparador: porSeparador || {},
+      rankingSeparadores: rankingSeparadores || []
+    };
+
+    console.log('📤 Retornando métricas:', {
+      totalTarefas: response.totalTarefas,
+      atendentes: Object.keys(porAtendente).length,
+      separadores: Object.keys(porSeparador).length
     });
+
+    res.json(response);
   } catch (error) {
-    console.error('Erro ao obter métricas:', error);
-    res.status(500).json({ error: 'Erro ao obter métricas' });
+    console.error('❌ ERRO ao obter métricas:', error);
+    console.error('Stack:', error.stack);
+    // Retornar estrutura vazia válida em caso de erro
+    res.status(500).json({
+      error: error.message || 'Erro ao obter métricas',
+      periodo: req.query.periodo || 'todos',
+      totalTarefas: 0,
+      tempoMedio: 0,
+      porAtendente: {},
+      porSeparador: {},
+      rankingSeparadores: []
+    });
   }
 });
 

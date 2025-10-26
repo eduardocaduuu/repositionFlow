@@ -13,58 +13,83 @@ function initializeFirebase() {
       return null;
     }
 
-    // Processar private key - aceita Base64 (recomendado) ou formato string
-    let privateKey;
+    // Opção 1: JSON completo (RECOMENDADO - mais confiável)
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      console.log('🔑 Usando GOOGLE_APPLICATION_CREDENTIALS_JSON (método recomendado)');
+      try {
+        const serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
 
-    // Opção 1: Base64 (mais confiável para variáveis de ambiente)
-    if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
-      console.log('🔑 Usando FIREBASE_PRIVATE_KEY_BASE64 (recomendado)');
-      const base64Key = process.env.FIREBASE_PRIVATE_KEY_BASE64;
-      privateKey = Buffer.from(base64Key, 'base64').toString('utf-8');
+        console.log('🔑 Configurando Firebase Admin SDK...');
+        console.log('   Project ID:', serviceAccount.project_id);
+        console.log('   Client Email:', serviceAccount.client_email);
+        console.log('   Private Key: [OK - formato JSON]');
+
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+      } catch (error) {
+        throw new Error(`Erro ao processar GOOGLE_APPLICATION_CREDENTIALS_JSON: ${error.message}`);
+      }
     }
-    // Opção 2: String normal (fallback)
-    else if (process.env.FIREBASE_PRIVATE_KEY) {
-      console.log('🔑 Usando FIREBASE_PRIVATE_KEY (formato string)');
-      privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    // Opção 2: Variáveis separadas (fallback para compatibilidade)
+    else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
+      console.log('🔑 Usando variáveis separadas (FIREBASE_PROJECT_ID, etc)');
 
-      // Se a chave vier com aspas, remover
-      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-        privateKey = privateKey.slice(1, -1);
+      let privateKey;
+
+      // Base64
+      if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
+        console.log('   → Decodificando FIREBASE_PRIVATE_KEY_BASE64');
+        const base64Key = process.env.FIREBASE_PRIVATE_KEY_BASE64;
+        privateKey = Buffer.from(base64Key, 'base64').toString('utf-8');
       }
-      if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
-        privateKey = privateKey.slice(1, -1);
+      // String normal
+      else if (process.env.FIREBASE_PRIVATE_KEY) {
+        console.log('   → Usando FIREBASE_PRIVATE_KEY (formato string)');
+        privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+        // Remover aspas
+        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+          privateKey = privateKey.slice(1, -1);
+        }
+        if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+          privateKey = privateKey.slice(1, -1);
+        }
+
+        // Substituir \n literal por quebra de linha real
+        privateKey = privateKey.replace(/\\n/g, '\n');
+
+        // Remover espaços/tabs no início de cada linha
+        privateKey = privateKey
+          .split('\n')
+          .map(line => line.trim())
+          .join('\n');
+      }
+      else {
+        throw new Error('FIREBASE_PRIVATE_KEY ou FIREBASE_PRIVATE_KEY_BASE64 não definida');
       }
 
-      // Substituir \n literal por quebra de linha real
-      privateKey = privateKey.replace(/\\n/g, '\n');
+      // Verificar formato
+      if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+        throw new Error('FIREBASE_PRIVATE_KEY inválida - formato incorreto');
+      }
 
-      // CRÍTICO: Remover espaços/tabs no início de cada linha
-      privateKey = privateKey
-        .split('\n')
-        .map(line => line.trim())
-        .join('\n');
+      console.log('🔑 Configurando Firebase Admin SDK...');
+      console.log('   Project ID:', process.env.FIREBASE_PROJECT_ID);
+      console.log('   Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+      console.log('   Private Key: [REDACTED - primeiros chars]', privateKey.substring(0, 30) + '...');
+
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          privateKey: privateKey,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        }),
+      });
     }
     else {
-      throw new Error('FIREBASE_PRIVATE_KEY ou FIREBASE_PRIVATE_KEY_BASE64 não definida');
+      throw new Error('Configuração do Firebase não encontrada. Use GOOGLE_APPLICATION_CREDENTIALS_JSON ou FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY');
     }
-
-    // Verificar se a chave tem o formato correto
-    if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-      throw new Error('FIREBASE_PRIVATE_KEY inválida - formato incorreto');
-    }
-
-    console.log('🔑 Configurando Firebase Admin SDK...');
-    console.log('   Project ID:', process.env.FIREBASE_PROJECT_ID);
-    console.log('   Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
-    console.log('   Private Key: [REDACTED - primeiros chars]', privateKey.substring(0, 30) + '...');
-
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKey: privateKey,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      }),
-    });
 
     console.log('✅ Firebase Firestore conectado com sucesso!');
     return admin.firestore();

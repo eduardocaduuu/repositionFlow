@@ -10,7 +10,8 @@ const state = {
     tasks: [],
     currentView: 'dashboard',
     charts: {},
-    timers: {}
+    timers: {},
+    pingInterval: null // Intervalo para heartbeat do WebSocket
 };
 
 // ==========================================
@@ -229,6 +230,12 @@ function connectWebSocket() {
 
     state.ws = new WebSocket(wsUrl);
 
+    // Limpar intervalo de ping anterior, se existir
+    if (state.pingInterval) {
+        clearInterval(state.pingInterval);
+        state.pingInterval = null;
+    }
+
     state.ws.onopen = () => {
         console.log('WebSocket conectado');
         state.ws.send(JSON.stringify({
@@ -236,6 +243,13 @@ function connectWebSocket() {
             name: state.user.name || state.user.role,
             role: state.user.role
         }));
+
+        // Iniciar heartbeat: enviar ping a cada 25 segundos
+        state.pingInterval = setInterval(() => {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 25000); // 25 segundos (antes do timeout do servidor de 30s)
     };
 
     state.ws.onmessage = (event) => {
@@ -253,6 +267,13 @@ function connectWebSocket() {
 
     state.ws.onclose = () => {
         console.log('WebSocket desconectado. Reconectando em 5s...');
+
+        // Limpar intervalo de ping
+        if (state.pingInterval) {
+            clearInterval(state.pingInterval);
+            state.pingInterval = null;
+        }
+
         setTimeout(() => {
             if (state.user) connectWebSocket();
         }, 5000);
@@ -260,11 +281,18 @@ function connectWebSocket() {
 }
 
 function handleWebSocketMessage(data) {
-    console.log('WebSocket message:', data);
+    // Não logar pings/pongs para evitar poluir o console
+    if (data.type !== 'ping' && data.type !== 'pong') {
+        console.log('WebSocket message:', data);
+    }
 
     switch (data.type) {
         case 'registered':
             console.log('Registrado no servidor');
+            break;
+
+        case 'pong':
+            // Resposta ao ping - conexão está viva
             break;
 
         case 'new_task':

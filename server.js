@@ -303,9 +303,23 @@ function processExcelConclusao(filePath) {
 wss.on('connection', (ws) => {
   console.log('Novo cliente conectado');
 
+  // Marcar conexão como viva
+  ws.isAlive = true;
+
+  // Responder a pings do cliente
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
+
+      // Responder a ping do cliente com pong
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
 
       if (data.type === 'register') {
         // Registrar usuário
@@ -334,6 +348,26 @@ wss.on('connection', (ws) => {
     users = users.filter(u => u.ws !== ws);
     console.log('Cliente desconectado');
   });
+});
+
+// Heartbeat: Enviar ping a cada 30 segundos para manter conexões vivas
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      // Cliente não respondeu ao último ping, desconectar
+      return ws.terminate();
+    }
+
+    // Marcar como "não respondeu ainda"
+    ws.isAlive = false;
+    // Enviar ping (WebSocket nativo)
+    ws.ping();
+  });
+}, 30000); // 30 segundos
+
+// Limpar intervalo quando o servidor fechar
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 // API Routes

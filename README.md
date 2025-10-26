@@ -54,9 +54,12 @@ Colunas opcionais:
 
 - **Backend**: Node.js, Express, WebSocket (ws)
 - **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
+- **Banco de Dados**: Firebase Firestore (NoSQL)
 - **Processamento de Planilhas**: xlsx
 - **Upload de Arquivos**: multer
-- **Deploy**: Render (plano gratuito)
+- **Deploy**:
+  - Frontend: Render (plano gratuito)
+  - Backend: Koyeb (plano gratuito - sempre ativo!)
 
 ## Instalação Local
 
@@ -88,31 +91,28 @@ npm start
 http://localhost:3000
 ```
 
-## Deploy no Render
+## 🚀 Deploy em Produção
 
-### Automático (recomendado)
+### Deploy Recomendado (24/7 - Sempre Ativo!)
+
+**Frontend (Render) + Backend (Koyeb)** - Arquitetura separada que mantém o backend sempre ativo!
+
+- **Frontend no Render**: HTML/CSS/JS estáticos (pode dormir após inatividade)
+- **Backend no Koyeb**: Node.js + API + WebSocket (SEMPRE ATIVO no plano gratuito!)
+
+📖 **Guia completo**: Veja [DEPLOYMENT.md](./DEPLOYMENT.md) para instruções passo a passo detalhadas.
+
+### Deploy Simples (Monolítico no Render)
+
+⚠️ **Limitação**: O serviço dorme após 15 minutos de inatividade.
 
 1. Faça fork deste repositório
 2. Acesse [Render Dashboard](https://dashboard.render.com/)
 3. Clique em "New +" e selecione "Web Service"
 4. Conecte seu repositório GitHub
 5. O Render detectará automaticamente o `render.yaml`
-6. Clique em "Create Web Service"
-
-### Manual
-
-1. Acesse [Render Dashboard](https://dashboard.render.com/)
-2. Clique em "New +" e selecione "Web Service"
-3. Conecte seu repositório GitHub
-4. Configure:
-   - **Name**: repositionflow
-   - **Environment**: Node
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Plan**: Free
-5. Adicione a variável de ambiente:
-   - `NODE_ENV=production`
-6. Clique em "Create Web Service"
+6. Configure as variáveis de ambiente do Firebase (veja [FIREBASE_SETUP.md](./FIREBASE_SETUP.md))
+7. Clique em "Create Web Service"
 
 ## Uso
 
@@ -184,16 +184,25 @@ Ao acessar a aplicação, você verá uma tela de login. Selecione seu papel:
 - Armazena quem iniciou, pausou, concluiu
 - Registra todas as pausas com duração
 
-## Limitações do Plano Gratuito do Render
+## Limitações e Soluções
 
-- O serviço entra em hibernação após 15 minutos de inatividade
-- Primeira requisição após hibernação pode demorar ~30 segundos
-- Dados são armazenados em memória (perdidos ao reiniciar)
-- Para produção real, considere upgrade e adicionar banco de dados
+### Deploy Monolítico no Render (Gratuito)
+
+- ⚠️ O serviço dorme após 15 minutos de inatividade
+- ⚠️ Primeira requisição pode demorar ~30 segundos para acordar
+
+### Deploy Separado (Recomendado - Render + Koyeb)
+
+- ✅ Backend sempre ativo no Koyeb (plano gratuito!)
+- ✅ Frontend estático no Render (carrega instantaneamente)
+- ✅ Persistência de dados com Firebase Firestore
+- ✅ Zero custo mensal!
+
+**Veja o guia completo em [DEPLOYMENT.md](./DEPLOYMENT.md)**
 
 ## Melhorias Futuras
 
-- [ ] Banco de dados persistente (PostgreSQL, MongoDB)
+- [x] Banco de dados persistente (Firebase Firestore) ✅
 - [ ] Autenticação com JWT
 - [ ] Atribuição automática de tarefas
 - [ ] Roteirização otimizada baseada em local de estoque
@@ -208,16 +217,22 @@ Ao acessar a aplicação, você verá uma tela de login. Selecione seu papel:
 
 ```
 repositionFlow/
-├── public/              # Frontend
-│   ├── index.html      # HTML principal
-│   ├── styles.css      # Estilos
-│   └── app.js          # Lógica do frontend
-├── uploads/            # Arquivos enviados (gerado automaticamente)
-├── server.js           # Servidor backend
-├── package.json        # Dependências
-├── render.yaml         # Configuração do Render
-├── .gitignore         # Arquivos ignorados pelo Git
-└── README.md          # Este arquivo
+├── public/                  # Frontend
+│   ├── index.html          # HTML principal
+│   ├── styles.css          # Estilos
+│   ├── config.js           # Configuração da URL do backend
+│   └── app.js              # Lógica do frontend
+├── uploads/                # Arquivos enviados (gerado automaticamente)
+├── server.js               # Servidor backend
+├── database.js             # Módulo de acesso ao Firestore
+├── package.json            # Dependências
+├── .env                    # Variáveis de ambiente (local)
+├── .koyeb.yaml             # Configuração do Koyeb
+├── render.yaml             # Configuração do Render
+├── DEPLOYMENT.md           # Guia de deploy separado
+├── FIREBASE_SETUP.md       # Guia de configuração do Firebase
+├── .gitignore             # Arquivos ignorados pelo Git
+└── README.md              # Este arquivo
 ```
 
 ## API Endpoints

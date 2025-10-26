@@ -14,6 +14,15 @@ const state = {
 };
 
 // ==========================================
+// API HELPER
+// ==========================================
+
+// Helper function para fazer chamadas à API usando CONFIG.API_URL
+function apiUrl(endpoint) {
+    return `${CONFIG.API_URL}${endpoint}`;
+}
+
+// ==========================================
 // INITIALIZATION
 // ==========================================
 
@@ -110,7 +119,7 @@ async function handleAdminLogin(e) {
     const password = document.getElementById('adminPassword').value;
 
     try {
-        const response = await fetch('/api/auth/admin', {
+        const response = await fetch(apiUrl('/api/auth/admin'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -215,8 +224,8 @@ function showRoleSelection() {
 // ==========================================
 
 function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    // Usar URL do backend configurada (Koyeb em produção, localhost em dev)
+    const wsUrl = CONFIG.WS_URL;
 
     state.ws = new WebSocket(wsUrl);
 
@@ -342,7 +351,7 @@ async function loadTasks() {
         if (status) params.append('status', status);
         if (atendente) params.append('atendente', atendente);
 
-        const response = await fetch(`/api/tasks?${params}`);
+        const response = await fetch(apiUrl(`/api/tasks?${params}`));
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -497,7 +506,7 @@ function createTaskCard(task) {
 
 async function openTaskModal(taskId) {
     try {
-        const response = await fetch(`/api/tasks/${taskId}`);
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}`));
         const task = await response.json();
 
         renderTaskModal(task);
@@ -728,7 +737,7 @@ async function startTask(taskId) {
             document.getElementById('userDisplay').textContent = `${roleEmoji[state.user.role]} ${nomeSeparador}`;
         }
 
-        const response = await fetch(`/api/tasks/${taskId}/start`, {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/start`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nomeSeparador })
@@ -751,7 +760,7 @@ async function startTask(taskId) {
 
 async function pauseTask(taskId) {
     try {
-        const response = await fetch(`/api/tasks/${taskId}/pause`, {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/pause`), {
             method: 'POST'
         });
 
@@ -770,7 +779,7 @@ async function pauseTask(taskId) {
 
 async function resumeTask(taskId) {
     try {
-        const response = await fetch(`/api/tasks/${taskId}/resume`, {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/resume`), {
             method: 'POST'
         });
 
@@ -803,7 +812,7 @@ async function completeTask(taskId) {
         const formData = new FormData();
         formData.append('planilhaConclusao', file);
 
-        const response = await fetch(`/api/tasks/${taskId}/complete`, {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/complete`), {
             method: 'POST',
             body: formData
         });
@@ -825,7 +834,7 @@ async function completeTask(taskId) {
 
 async function markItem(taskId, sku, status) {
     try {
-        const response = await fetch(`/api/tasks/${taskId}/items/${sku}`, {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/items/${sku}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
@@ -882,7 +891,7 @@ async function handleUploadForm(e) {
     formData.append('planilha', file);
 
     try {
-        const response = await fetch('/api/tasks', {
+        const response = await fetch(apiUrl('/api/tasks'), {
             method: 'POST',
             body: formData
         });
@@ -922,7 +931,7 @@ async function loadMetrics() {
         const params = new URLSearchParams();
         if (periodo) params.append('periodo', periodo);
 
-        const response = await fetch(`/api/metrics?${params}`);
+        const response = await fetch(apiUrl(`/api/metrics?${params}`));
         const data = await response.json();
 
         // Se houver erro no backend, ainda renderizar estrutura vazia
@@ -1027,7 +1036,7 @@ function renderDetailedStats(porAtendente, porSeparador) {
 
 async function loadAdminDashboard() {
     try {
-        const response = await fetch('/api/admin/dashboard');
+        const response = await fetch(apiUrl('/api/admin/dashboard'));
         const data = await response.json();
 
         // Update stats

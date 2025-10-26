@@ -1,0 +1,30 @@
+# Configuração do Koyeb para RepositionFlow Backend
+# https://www.koyeb.com/docs/reference/koyeb-manifest
+
+app_name: repositionflow-backend
+
+services:
+  - name: api
+    instance_type: free
+    buildpack: nodejs
+    build:
+      buildCommand: npm install
+    run: node server.js
+    ports:
+      - port: 3000
+        protocol: http
+    env:
+      - key: PORT
+        value: "3000"
+      - key: NODE_ENV
+        value: production
+      # As variáveis abaixo devem ser configuradas no dashboard do Koyeb:
+      # - FIREBASE_PROJECT_ID
+      # - FIREBASE_CLIENT_EMAIL
+      # - FIREBASE_PRIVATE_KEY
+      # - FRONTEND_URL (URL do frontend no Render)
+    regions:
+      - was  # Washington, D.C.
+    scaling:
+      min: 1
+      max: 1

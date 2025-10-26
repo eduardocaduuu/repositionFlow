@@ -343,14 +343,30 @@ async function loadTasks() {
         if (atendente) params.append('atendente', atendente);
 
         const response = await fetch(`/api/tasks?${params}`);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erro ao carregar tarefas');
+        }
+
         const tasks = await response.json();
+
+        // Verificar se tasks é um array
+        if (!Array.isArray(tasks)) {
+            console.error('Resposta inválida do servidor:', tasks);
+            throw new Error('Formato de resposta inválido');
+        }
 
         state.tasks = tasks;
         renderTasks(tasks);
         updateDashboardStats(tasks);
     } catch (error) {
         console.error('Erro ao carregar tarefas:', error);
-        showToast('Erro ao carregar tarefas', 'error');
+        showToast(error.message || 'Erro ao carregar tarefas', 'error');
+        // Renderizar lista vazia em caso de erro
+        state.tasks = [];
+        renderTasks([]);
+        updateDashboardStats([]);
     }
 }
 

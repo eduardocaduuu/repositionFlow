@@ -406,6 +406,7 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
 // Listar tarefas
 app.get('/api/tasks', async (req, res) => {
   try {
+    console.log('📋 GET /api/tasks - Iniciando busca de tarefas...');
     const { status, atendente, dataInicio, dataFim } = req.query;
 
     // Buscar tarefas do database
@@ -413,7 +414,10 @@ app.get('/api/tasks', async (req, res) => {
     if (status) filters.status = status;
     if (atendente) filters.nomeAtendente = atendente;
 
+    console.log('🔍 Filtros aplicados:', filters);
+
     let filteredTasks = await database.getAllTasks(filters);
+    console.log(`✅ Tarefas encontradas: ${filteredTasks.length}`);
 
     // Aplicar filtros de data (não suportados diretamente pelo database)
     if (dataInicio) {
@@ -428,10 +432,12 @@ app.get('/api/tasks', async (req, res) => {
       );
     }
 
+    console.log(`📤 Retornando ${filteredTasks.length} tarefas`);
     res.json(filteredTasks);
   } catch (error) {
-    console.error('Erro ao listar tarefas:', error);
-    res.status(500).json({ error: 'Erro ao buscar tarefas' });
+    console.error('❌ ERRO ao listar tarefas:', error);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ error: error.message || 'Erro ao buscar tarefas' });
   }
 });
 

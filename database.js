@@ -85,6 +85,7 @@ class Database {
   async getAllTasks(filters = {}) {
     if (this.useFirestore) {
       try {
+        console.log('📊 [Firestore] Buscando tarefas com filtros:', filters);
         let query = db.collection(COLLECTIONS.TASKS);
 
         // Aplicar filtros
@@ -98,6 +99,7 @@ class Database {
         // Ordenar por data de criação (mais recentes primeiro)
         query = query.orderBy('createdAt', 'desc');
 
+        console.log('🔄 [Firestore] Executando query...');
         const snapshot = await query.get();
         const tasks = [];
 
@@ -113,13 +115,16 @@ class Database {
           tasks.push(data);
         });
 
+        console.log(`✅ [Firestore] ${tasks.length} tarefas recuperadas`);
         return tasks;
       } catch (error) {
-        console.error('Erro ao buscar tasks no Firestore:', error);
+        console.error('❌ [Firestore] Erro ao buscar tasks:', error.message);
+        console.error('Stack:', error.stack);
         throw error;
       }
     } else {
       // Fallback: memória
+      console.log('💾 [Memória] Buscando tarefas com filtros:', filters);
       let tasks = [...this.memoryTasks];
 
       if (filters.status) {
@@ -129,6 +134,7 @@ class Database {
         tasks = tasks.filter(t => t.nomeAtendente.toLowerCase().includes(filters.nomeAtendente.toLowerCase()));
       }
 
+      console.log(`✅ [Memória] ${tasks.length} tarefas recuperadas`);
       return tasks;
     }
   }

@@ -13,29 +13,40 @@ function initializeFirebase() {
       return null;
     }
 
-    // Processar private key - aceita tanto \n literal quanto quebras de linha reais
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    // Processar private key - aceita Base64 (recomendado) ou formato string
+    let privateKey;
 
-    if (!privateKey) {
-      throw new Error('FIREBASE_PRIVATE_KEY não definida');
+    // Opção 1: Base64 (mais confiável para variáveis de ambiente)
+    if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
+      console.log('🔑 Usando FIREBASE_PRIVATE_KEY_BASE64 (recomendado)');
+      const base64Key = process.env.FIREBASE_PRIVATE_KEY_BASE64;
+      privateKey = Buffer.from(base64Key, 'base64').toString('utf-8');
     }
+    // Opção 2: String normal (fallback)
+    else if (process.env.FIREBASE_PRIVATE_KEY) {
+      console.log('🔑 Usando FIREBASE_PRIVATE_KEY (formato string)');
+      privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    // Se a chave vier com aspas, remover
-    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1);
+      // Se a chave vier com aspas, remover
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+      if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+        privateKey = privateKey.slice(1, -1);
+      }
+
+      // Substituir \n literal por quebra de linha real
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
+      // CRÍTICO: Remover espaços/tabs no início de cada linha
+      privateKey = privateKey
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n');
     }
-    if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
-      privateKey = privateKey.slice(1, -1);
+    else {
+      throw new Error('FIREBASE_PRIVATE_KEY ou FIREBASE_PRIVATE_KEY_BASE64 não definida');
     }
-
-    // Substituir \n literal por quebra de linha real
-    privateKey = privateKey.replace(/\\n/g, '\n');
-
-    // CRÍTICO: Remover espaços/tabs no início de cada linha
-    privateKey = privateKey
-      .split('\n')
-      .map(line => line.trim())
-      .join('\n');
 
     // Verificar se a chave tem o formato correto
     if (!privateKey.includes('BEGIN PRIVATE KEY')) {

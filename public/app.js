@@ -191,7 +191,7 @@ function showMainApp() {
     hideElement('adminDashboardBtn');
 
     // THEN: Show only buttons appropriate for current role
-    if (state.user.role === 'atendente' || state.user.role === 'admin') {
+    if (state.user.role === 'atendente') {
         showElement('novaTarefaBtn');
     }
     if (state.user.role === 'admin') {
@@ -287,9 +287,9 @@ function switchView(viewName) {
         return;
     }
 
-    // Security check: Prevent separador from accessing nova-tarefa
-    if (viewName === 'nova-tarefa' && state.user.role === 'separador') {
-        showToast('Acesso negado: apenas atendentes e administradores', 'error');
+    // Security check: Only atendente can access nova-tarefa
+    if (viewName === 'nova-tarefa' && state.user.role !== 'atendente') {
+        showToast('Acesso negado: apenas atendentes', 'error');
         return;
     }
 

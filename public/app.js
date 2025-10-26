@@ -541,26 +541,49 @@ function renderTaskModal(task) {
 
         <!-- Control Buttons -->
         ${canControl ? `
-            <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
-                ${task.status === 'PENDENTE' ? `
+            ${task.status === 'PENDENTE' ? `
+                <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="startTask('${task.id}')">
                         ▶️ Iniciar Separação
                     </button>
-                ` : ''}
-                ${task.status === 'EM_SEPARACAO' && !task.isPaused ? `
-                    <button class="btn btn-secondary" onclick="pauseTask('${task.id}')">
-                        ⏸️ Pausar
-                    </button>
-                    <button class="btn btn-primary" onclick="completeTask('${task.id}')">
-                        ✓ Concluir
-                    </button>
-                ` : ''}
-                ${task.status === 'EM_SEPARACAO' && task.isPaused ? `
+                </div>
+            ` : ''}
+            ${task.status === 'EM_SEPARACAO' && !task.isPaused ? `
+                <div style="margin-bottom: 2rem;">
+                    <div class="glass-card" style="padding: 1.5rem; margin-bottom: 1rem; background: var(--bg-tertiary); border-left: 4px solid var(--accent-green);">
+                        <h4 style="margin-bottom: 1rem; color: var(--accent-green);">📋 Para Concluir a Tarefa</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                            Envie a planilha Excel com os dados da movimentação. A planilha deve conter as colunas obrigatórias:
+                        </p>
+                        <ul style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem; padding-left: 1.5rem;">
+                            <li><strong>Data movimentacao</strong> - Data da separação</li>
+                            <li><strong>Tipo movimentacao</strong> - Tipo de movimentação</li>
+                            <li><strong>Quantidade material</strong> - Quantidade separada</li>
+                        </ul>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label for="planilhaConclusao-${task.id}" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">
+                                Planilha de Conclusão (.xlsx) *
+                            </label>
+                            <input type="file" id="planilhaConclusao-${task.id}" accept=".xlsx,.xls" style="width: 100%;">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="pauseTask('${task.id}')">
+                            ⏸️ Pausar
+                        </button>
+                        <button class="btn btn-primary" onclick="completeTask('${task.id}')">
+                            ✓ Concluir Separação
+                        </button>
+                    </div>
+                </div>
+            ` : ''}
+            ${task.status === 'EM_SEPARACAO' && task.isPaused ? `
+                <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="resumeTask('${task.id}')">
                         ▶️ Retomar
                     </button>
-                ` : ''}
-            </div>
+                </div>
+            ` : ''}
         ` : ''}
 
         <!-- Export Button -->
@@ -749,11 +772,24 @@ async function resumeTask(taskId) {
 }
 
 async function completeTask(taskId) {
+    // Verificar se o arquivo foi enviado
+    const fileInput = document.getElementById(`planilhaConclusao-${taskId}`);
+    const file = fileInput?.files[0];
+
+    if (!file) {
+        showToast('É obrigatório enviar a planilha de conclusão com as colunas: Data movimentacao, Tipo movimentacao, Quantidade material', 'error');
+        return;
+    }
+
     if (!confirm('Deseja realmente concluir esta separação?')) return;
 
     try {
+        const formData = new FormData();
+        formData.append('planilhaConclusao', file);
+
         const response = await fetch(`/api/tasks/${taskId}/complete`, {
-            method: 'POST'
+            method: 'POST',
+            body: formData
         });
 
         const data = await response.json();
@@ -762,6 +798,8 @@ async function completeTask(taskId) {
             showToast(`Tarefa concluída! Tempo: ${data.duration}`, 'success');
             closeModal();
             loadTasks();
+        } else {
+            showToast(data.error || 'Erro ao concluir tarefa', 'error');
         }
     } catch (error) {
         console.error('Erro ao concluir tarefa:', error);

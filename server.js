@@ -195,6 +195,98 @@ function processExcel(filePath) {
   };
 }
 
+// Processar planilha de conclusão do separador
+function processExcelConclusao(filePath) {
+  const workbook = xlsx.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+
+  // Obter todas as colunas da planilha
+  const data = xlsx.utils.sheet_to_json(worksheet);
+
+  if (data.length === 0) {
+    return {
+      success: false,
+      error: 'Planilha vazia'
+    };
+  }
+
+  // Verificar colunas obrigatórias (aceitar variações)
+  const firstRow = data[0];
+  const columns = Object.keys(firstRow);
+
+  const requiredColumns = [
+    {
+      names: ['Data movimentacao', 'Data movimentação', 'Data Movimentacao', 'Data Movimentação', 'Data', 'Data da movimentacao'],
+      found: false,
+      label: 'Data movimentacao'
+    },
+    {
+      names: ['Tipo movimentacao', 'Tipo movimentação', 'Tipo Movimentacao', 'Tipo Movimentação', 'Tipo'],
+      found: false,
+      label: 'Tipo movimentacao'
+    },
+    {
+      names: ['Quantidade material', 'Qtd material', 'Quantidade', 'Qtd Material', 'Quantidade Material'],
+      found: false,
+      label: 'Quantidade material'
+    }
+  ];
+
+  // Verificar se cada coluna obrigatória existe (com variações)
+  requiredColumns.forEach(reqCol => {
+    reqCol.found = reqCol.names.some(name =>
+      columns.some(col => col.toLowerCase().trim() === name.toLowerCase().trim())
+    );
+  });
+
+  const missingColumns = requiredColumns.filter(col => !col.found).map(col => col.label);
+
+  if (missingColumns.length > 0) {
+    return {
+      success: false,
+      error: `Colunas obrigatórias ausentes na planilha de conclusão: ${missingColumns.join(', ')}`
+    };
+  }
+
+  // Processar dados da planilha
+  const movimentacoes = data.map(row => {
+    // Buscar valores com múltiplas variações de nome
+    const dataMovimentacao = getColumnValue(row, [
+      'Data movimentacao', 'Data movimentação', 'Data Movimentacao',
+      'Data Movimentação', 'Data', 'Data da movimentacao'
+    ]);
+
+    const tipoMovimentacao = getColumnValue(row, [
+      'Tipo movimentacao', 'Tipo movimentação', 'Tipo Movimentacao',
+      'Tipo Movimentação', 'Tipo'
+    ]);
+
+    const quantidadeMaterial = getColumnValue(row, [
+      'Quantidade material', 'Qtd material', 'Quantidade',
+      'Qtd Material', 'Quantidade Material'
+    ]);
+
+    return {
+      data_movimentacao: dataMovimentacao,
+      tipo_movimentacao: tipoMovimentacao,
+      quantidade_material: quantidadeMaterial,
+      // Capturar todas as outras colunas que possam existir
+      dados_completos: row
+    };
+  });
+
+  return {
+    success: true,
+    movimentacoes,
+    totalLinhas: movimentacoes.length,
+    totalQuantidade: movimentacoes.reduce((sum, mov) => {
+      const qtd = parseInt(mov.quantidade_material) || 0;
+      return sum + qtd;
+    }, 0)
+  };
+}
+
 // WebSocket connection
 wss.on('connection', (ws) => {
   console.log('Novo cliente conectado');
@@ -508,55 +600,94 @@ app.patch('/api/tasks/:id/items/:sku', (req, res) => {
   res.json({ success: true, item });
 });
 
-// Concluir separação
-app.post('/api/tasks/:id/complete', (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id);
+// Concluir separação (com upload de planilha obrigatório)
+app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), (req, res) => {
+  try {
+    const task = tasks.find(t => t.id === req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    if (task.status !== 'EM_SEPARACAO') {
+      return res.status(400).json({ error: 'Tarefa não está em separação' });
+    }
+
+    // Validar que arquivo foi enviado
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'É obrigatório enviar a planilha de conclusão com as colunas: Data movimentacao, Tipo movimentacao, Quantidade material'
+      });
+    }
+
+    // Processar planilha de conclusão
+    const resultConclusao = processExcelConclusao(req.file.path);
+
+    if (!resultConclusao.success) {
+      // Remover arquivo inválido
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: resultConclusao.error });
+    }
+
+    const now = new Date().toISOString();
+
+    // Calcular tempo ativo
+    const totalTime = (new Date(now) - new Date(task.startTime)) / 1000;
+    const pauseTime = task.pausas.reduce((sum, p) => sum + p.duracao, 0);
+    task.activeTime = totalTime - pauseTime;
+
+    task.status = 'CONCLUIDO';
+    task.endTime = now;
+
+    // Salvar dados da planilha de conclusão
+    task.planilhaConclusao = {
+      arquivo: req.file.filename,
+      movimentacoes: resultConclusao.movimentacoes,
+      totalLinhas: resultConclusao.totalLinhas,
+      totalQuantidade: resultConclusao.totalQuantidade,
+      uploadedAt: now
+    };
+
+    task.timeline.push({
+      action: 'CONCLUIDA',
+      timestamp: now,
+      user: task.nomeSeparador,
+      detalhes: `Planilha de conclusão enviada: ${resultConclusao.totalLinhas} linhas, ${resultConclusao.totalQuantidade} itens`
+    });
+
+    // Formatar tempo para exibição
+    const hours = Math.floor(task.activeTime / 3600);
+    const minutes = Math.floor((task.activeTime % 3600) / 60);
+    const seconds = Math.floor(task.activeTime % 60);
+    task.durationFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    // Notificar todos os clientes
+    broadcast({
+      type: 'task_completed',
+      taskId: task.id,
+      endTime: now,
+      duration: task.durationFormatted,
+      activeTime: task.activeTime
+    });
+
+    res.json({
+      success: true,
+      message: 'Separação concluída com sucesso',
+      duration: task.durationFormatted,
+      activeTime: task.activeTime,
+      planilhaConclusao: {
+        totalLinhas: resultConclusao.totalLinhas,
+        totalQuantidade: resultConclusao.totalQuantidade
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao concluir tarefa:', error);
+    // Remover arquivo se houver erro
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Erro ao processar conclusão da tarefa' });
   }
-
-  if (task.status !== 'EM_SEPARACAO') {
-    return res.status(400).json({ error: 'Tarefa não está em separação' });
-  }
-
-  const now = new Date().toISOString();
-
-  // Calcular tempo ativo
-  const totalTime = (new Date(now) - new Date(task.startTime)) / 1000;
-  const pauseTime = task.pausas.reduce((sum, p) => sum + p.duracao, 0);
-  task.activeTime = totalTime - pauseTime;
-
-  task.status = 'CONCLUIDO';
-  task.endTime = now;
-
-  task.timeline.push({
-    action: 'CONCLUIDA',
-    timestamp: now,
-    user: task.nomeSeparador
-  });
-
-  // Formatar tempo para exibição
-  const hours = Math.floor(task.activeTime / 3600);
-  const minutes = Math.floor((task.activeTime % 3600) / 60);
-  const seconds = Math.floor(task.activeTime % 60);
-  task.durationFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-  // Notificar todos os clientes
-  broadcast({
-    type: 'task_completed',
-    taskId: task.id,
-    endTime: now,
-    duration: task.durationFormatted,
-    activeTime: task.activeTime
-  });
-
-  res.json({
-    success: true,
-    message: 'Separação concluída',
-    duration: task.durationFormatted,
-    activeTime: task.activeTime
-  });
 });
 
 // Obter métricas

@@ -55,7 +55,6 @@ const upload = multer({
 // Armazenamento
 // Sistema usa Firebase Firestore se configurado, caso contrário usa memória
 // O módulo database.js gerencia automaticamente o fallback
-let tasks = []; // Fallback: usado apenas se Firebase não estiver configurado
 let users = []; // {id, name, role: 'atendente' | 'separador', ws} - sempre em memória (sessões WebSocket)
 
 // Broadcast para todos os clientes conectados
@@ -332,7 +331,7 @@ wss.on('connection', (ws) => {
 // API Routes
 
 // Criar nova tarefa (upload de planilha)
-app.post('/api/tasks', upload.single('planilha'), (req, res) => {
+app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
@@ -372,7 +371,7 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
       }]
     };
 
-    tasks.push(task);
+    await database.createTask(task);
 
     // Notificar separadores
     broadcast({
@@ -405,210 +404,251 @@ app.post('/api/tasks', upload.single('planilha'), (req, res) => {
 });
 
 // Listar tarefas
-app.get('/api/tasks', (req, res) => {
-  const { status, atendente, dataInicio, dataFim } = req.query;
+app.get('/api/tasks', async (req, res) => {
+  try {
+    const { status, atendente, dataInicio, dataFim } = req.query;
 
-  let filteredTasks = [...tasks];
+    // Buscar tarefas do database
+    const filters = {};
+    if (status) filters.status = status;
+    if (atendente) filters.nomeAtendente = atendente;
 
-  if (status) {
-    filteredTasks = filteredTasks.filter(t => t.status === status);
+    let filteredTasks = await database.getAllTasks(filters);
+
+    // Aplicar filtros de data (não suportados diretamente pelo database)
+    if (dataInicio) {
+      filteredTasks = filteredTasks.filter(t =>
+        new Date(t.createdAt) >= new Date(dataInicio)
+      );
+    }
+
+    if (dataFim) {
+      filteredTasks = filteredTasks.filter(t =>
+        new Date(t.createdAt) <= new Date(dataFim)
+      );
+    }
+
+    res.json(filteredTasks);
+  } catch (error) {
+    console.error('Erro ao listar tarefas:', error);
+    res.status(500).json({ error: 'Erro ao buscar tarefas' });
   }
-
-  if (atendente) {
-    filteredTasks = filteredTasks.filter(t =>
-      t.nomeAtendente.toLowerCase().includes(atendente.toLowerCase())
-    );
-  }
-
-  if (dataInicio) {
-    filteredTasks = filteredTasks.filter(t =>
-      new Date(t.createdAt) >= new Date(dataInicio)
-    );
-  }
-
-  if (dataFim) {
-    filteredTasks = filteredTasks.filter(t =>
-      new Date(t.createdAt) <= new Date(dataFim)
-    );
-  }
-
-  // Ordenar por data de criação (mais recentes primeiro)
-  filteredTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  res.json(filteredTasks);
 });
 
 // Obter detalhes de uma tarefa
-app.get('/api/tasks/:id', (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id);
+app.get('/api/tasks/:id', async (req, res) => {
+  try {
+    const task = await database.getTaskById(req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    res.json(task);
+  } catch (error) {
+    console.error('Erro ao buscar tarefa:', error);
+    res.status(500).json({ error: 'Erro ao buscar tarefa' });
   }
-
-  res.json(task);
 });
 
 // Iniciar separação (iniciar cronômetro)
-app.post('/api/tasks/:id/start', (req, res) => {
-  const { nomeSeparador } = req.body;
-  const task = tasks.find(t => t.id === req.params.id);
+app.post('/api/tasks/:id/start', async (req, res) => {
+  try {
+    const { nomeSeparador } = req.body;
+    const task = await database.getTaskById(req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
-  }
-
-  if (task.status === 'EM_SEPARACAO') {
-    return res.status(400).json({
-      error: 'Já existe uma separação em andamento',
-      separador: task.nomeSeparador
-    });
-  }
-
-  if (task.status === 'CONCLUIDO') {
-    return res.status(400).json({ error: 'Tarefa já concluída' });
-  }
-
-  task.status = 'EM_SEPARACAO';
-  task.nomeSeparador = nomeSeparador;
-  task.startTime = new Date().toISOString();
-  task.activeTime = 0; // Tempo ativo em segundos
-  task.isPaused = false;
-  task.pausas = [];
-
-  task.timeline.push({
-    action: 'INICIADA',
-    timestamp: task.startTime,
-    user: nomeSeparador
-  });
-
-  // Notificar todos os clientes
-  broadcast({
-    type: 'task_started',
-    taskId: task.id,
-    nomeSeparador,
-    startTime: task.startTime
-  });
-
-  res.json({
-    success: true,
-    message: 'Separação iniciada',
-    task: {
-      id: task.id,
-      status: task.status,
-      startTime: task.startTime
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
     }
-  });
+
+    if (task.status === 'EM_SEPARACAO') {
+      return res.status(400).json({
+        error: 'Já existe uma separação em andamento',
+        separador: task.nomeSeparador
+      });
+    }
+
+    if (task.status === 'CONCLUIDO') {
+      return res.status(400).json({ error: 'Tarefa já concluída' });
+    }
+
+    const startTime = new Date().toISOString();
+    const timeline = task.timeline || [];
+    timeline.push({
+      action: 'INICIADA',
+      timestamp: startTime,
+      user: nomeSeparador
+    });
+
+    await database.updateTask(req.params.id, {
+      status: 'EM_SEPARACAO',
+      nomeSeparador,
+      startTime,
+      activeTime: 0,
+      isPaused: false,
+      pausas: [],
+      timeline
+    });
+
+    // Notificar todos os clientes
+    broadcast({
+      type: 'task_started',
+      taskId: task.id,
+      nomeSeparador,
+      startTime
+    });
+
+    res.json({
+      success: true,
+      message: 'Separação iniciada',
+      task: {
+        id: task.id,
+        status: 'EM_SEPARACAO',
+        startTime
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao iniciar separação:', error);
+    res.status(500).json({ error: 'Erro ao iniciar separação' });
+  }
 });
 
 // Pausar separação
-app.post('/api/tasks/:id/pause', (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id);
+app.post('/api/tasks/:id/pause', async (req, res) => {
+  try {
+    const task = await database.getTaskById(req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    if (task.status !== 'EM_SEPARACAO') {
+      return res.status(400).json({ error: 'Tarefa não está em separação' });
+    }
+
+    if (task.isPaused) {
+      return res.status(400).json({ error: 'Tarefa já está pausada' });
+    }
+
+    const now = new Date().toISOString();
+    const timeline = task.timeline || [];
+    timeline.push({
+      action: 'PAUSADA',
+      timestamp: now,
+      user: task.nomeSeparador
+    });
+
+    await database.updateTask(req.params.id, {
+      isPaused: true,
+      pauseStartTime: now,
+      timeline
+    });
+
+    broadcast({
+      type: 'task_paused',
+      taskId: task.id,
+      pauseTime: now
+    });
+
+    res.json({ success: true, message: 'Separação pausada' });
+  } catch (error) {
+    console.error('Erro ao pausar separação:', error);
+    res.status(500).json({ error: 'Erro ao pausar separação' });
   }
-
-  if (task.status !== 'EM_SEPARACAO') {
-    return res.status(400).json({ error: 'Tarefa não está em separação' });
-  }
-
-  if (task.isPaused) {
-    return res.status(400).json({ error: 'Tarefa já está pausada' });
-  }
-
-  const now = new Date().toISOString();
-  task.isPaused = true;
-  task.pauseStartTime = now;
-
-  task.timeline.push({
-    action: 'PAUSADA',
-    timestamp: now,
-    user: task.nomeSeparador
-  });
-
-  broadcast({
-    type: 'task_paused',
-    taskId: task.id,
-    pauseTime: now
-  });
-
-  res.json({ success: true, message: 'Separação pausada' });
 });
 
 // Retomar separação
-app.post('/api/tasks/:id/resume', (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id);
+app.post('/api/tasks/:id/resume', async (req, res) => {
+  try {
+    const task = await database.getTaskById(req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    if (!task.isPaused) {
+      return res.status(400).json({ error: 'Tarefa não está pausada' });
+    }
+
+    const now = new Date().toISOString();
+    const pauseDuration = (new Date(now) - new Date(task.pauseStartTime)) / 1000;
+
+    const pausas = task.pausas || [];
+    pausas.push({
+      inicio: task.pauseStartTime,
+      fim: now,
+      duracao: pauseDuration
+    });
+
+    const timeline = task.timeline || [];
+    timeline.push({
+      action: 'RETOMADA',
+      timestamp: now,
+      user: task.nomeSeparador
+    });
+
+    await database.updateTask(req.params.id, {
+      pausas,
+      isPaused: false,
+      pauseStartTime: null,
+      timeline
+    });
+
+    broadcast({
+      type: 'task_resumed',
+      taskId: task.id,
+      resumeTime: now
+    });
+
+    res.json({ success: true, message: 'Separação retomada' });
+  } catch (error) {
+    console.error('Erro ao retomar separação:', error);
+    res.status(500).json({ error: 'Erro ao retomar separação' });
   }
-
-  if (!task.isPaused) {
-    return res.status(400).json({ error: 'Tarefa não está pausada' });
-  }
-
-  const now = new Date().toISOString();
-  const pauseDuration = (new Date(now) - new Date(task.pauseStartTime)) / 1000;
-
-  task.pausas.push({
-    inicio: task.pauseStartTime,
-    fim: now,
-    duracao: pauseDuration
-  });
-
-  task.isPaused = false;
-  delete task.pauseStartTime;
-
-  task.timeline.push({
-    action: 'RETOMADA',
-    timestamp: now,
-    user: task.nomeSeparador
-  });
-
-  broadcast({
-    type: 'task_resumed',
-    taskId: task.id,
-    resumeTime: now
-  });
-
-  res.json({ success: true, message: 'Separação retomada' });
 });
 
 // Atualizar status de item
-app.patch('/api/tasks/:id/items/:sku', (req, res) => {
-  const { status, observacao } = req.body;
-  const task = tasks.find(t => t.id === req.params.id);
+app.patch('/api/tasks/:id/items/:sku', async (req, res) => {
+  try {
+    const { status, observacao } = req.body;
+    const task = await database.getTaskById(req.params.id);
 
-  if (!task) {
-    return res.status(404).json({ error: 'Tarefa não encontrada' });
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    const items = task.items || [];
+    const item = items.find(i => i.sku?.toString() === req.params.sku);
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item não encontrado' });
+    }
+
+    item.status_separacao = status; // 'OK' ou 'FALTANDO'
+    if (observacao) {
+      item.observacao_separacao = observacao;
+    }
+
+    await database.updateTask(req.params.id, { items });
+
+    broadcast({
+      type: 'item_updated',
+      taskId: task.id,
+      sku: req.params.sku,
+      status
+    });
+
+    res.json({ success: true, item });
+  } catch (error) {
+    console.error('Erro ao atualizar item:', error);
+    res.status(500).json({ error: 'Erro ao atualizar item' });
   }
-
-  const item = task.items.find(i => i.SKU?.toString() === req.params.sku);
-
-  if (!item) {
-    return res.status(404).json({ error: 'Item não encontrado' });
-  }
-
-  item.status_separacao = status; // 'OK' ou 'FALTANDO'
-  if (observacao) {
-    item.observacao_separacao = observacao;
-  }
-
-  broadcast({
-    type: 'item_updated',
-    taskId: task.id,
-    sku: req.params.sku,
-    status
-  });
-
-  res.json({ success: true, item });
 });
 
 // Concluir separação (com upload de planilha obrigatório)
-app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), (req, res) => {
+app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), async (req, res) => {
   try {
-    const task = tasks.find(t => t.id === req.params.id);
+    const task = await database.getTaskById(req.params.id);
 
     if (!task) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -638,48 +678,53 @@ app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), (req, re
 
     // Calcular tempo ativo
     const totalTime = (new Date(now) - new Date(task.startTime)) / 1000;
-    const pauseTime = task.pausas.reduce((sum, p) => sum + p.duracao, 0);
-    task.activeTime = totalTime - pauseTime;
+    const pausas = task.pausas || [];
+    const pauseTime = pausas.reduce((sum, p) => sum + p.duracao, 0);
+    const activeTime = totalTime - pauseTime;
 
-    task.status = 'CONCLUIDO';
-    task.endTime = now;
+    // Formatar tempo para exibição
+    const hours = Math.floor(activeTime / 3600);
+    const minutes = Math.floor((activeTime % 3600) / 60);
+    const seconds = Math.floor(activeTime % 60);
+    const durationFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-    // Salvar dados da planilha de conclusão
-    task.planilhaConclusao = {
-      arquivo: req.file.filename,
-      movimentacoes: resultConclusao.movimentacoes,
-      totalLinhas: resultConclusao.totalLinhas,
-      totalQuantidade: resultConclusao.totalQuantidade,
-      uploadedAt: now
-    };
-
-    task.timeline.push({
+    const timeline = task.timeline || [];
+    timeline.push({
       action: 'CONCLUIDA',
       timestamp: now,
       user: task.nomeSeparador,
       detalhes: `Planilha de conclusão enviada: ${resultConclusao.totalLinhas} linhas, ${resultConclusao.totalQuantidade} itens`
     });
 
-    // Formatar tempo para exibição
-    const hours = Math.floor(task.activeTime / 3600);
-    const minutes = Math.floor((task.activeTime % 3600) / 60);
-    const seconds = Math.floor(task.activeTime % 60);
-    task.durationFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    await database.updateTask(req.params.id, {
+      status: 'CONCLUIDO',
+      endTime: now,
+      activeTime,
+      durationFormatted,
+      planilhaConclusao: {
+        arquivo: req.file.filename,
+        movimentacoes: resultConclusao.movimentacoes,
+        totalLinhas: resultConclusao.totalLinhas,
+        totalQuantidade: resultConclusao.totalQuantidade,
+        uploadedAt: now
+      },
+      timeline
+    });
 
     // Notificar todos os clientes
     broadcast({
       type: 'task_completed',
       taskId: task.id,
       endTime: now,
-      duration: task.durationFormatted,
-      activeTime: task.activeTime
+      duration: durationFormatted,
+      activeTime
     });
 
     res.json({
       success: true,
       message: 'Separação concluída com sucesso',
-      duration: task.durationFormatted,
-      activeTime: task.activeTime,
+      duration: durationFormatted,
+      activeTime,
       planilhaConclusao: {
         totalLinhas: resultConclusao.totalLinhas,
         totalQuantidade: resultConclusao.totalQuantidade
@@ -696,98 +741,96 @@ app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), (req, re
 });
 
 // Obter métricas
-app.get('/api/metrics', (req, res) => {
-  const { periodo } = req.query; // 'dia', 'semana', 'mes'
+app.get('/api/metrics', async (req, res) => {
+  try {
+    const { periodo } = req.query; // 'dia', 'semana', 'mes'
 
-  let filteredTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+    const filteredTasks = await database.getCompletedTasks({ periodo });
 
-  const now = new Date();
-  if (periodo === 'dia') {
-    const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
-    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneDayAgo);
-  } else if (periodo === 'semana') {
-    const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneWeekAgo);
-  } else if (periodo === 'mes') {
-    const oneMonthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
-    filteredTasks = filteredTasks.filter(t => new Date(t.createdAt) >= oneMonthAgo);
-  }
+    // Tempo médio
+    const avgTime = filteredTasks.length > 0
+      ? filteredTasks.reduce((sum, t) => sum + (t.activeTime || 0), 0) / filteredTasks.length
+      : 0;
 
-  // Tempo médio
-  const avgTime = filteredTasks.length > 0
-    ? filteredTasks.reduce((sum, t) => sum + t.activeTime, 0) / filteredTasks.length
-    : 0;
-
-  // Por atendente
-  const porAtendente = {};
-  filteredTasks.forEach(t => {
-    if (!porAtendente[t.nomeAtendente]) {
-      porAtendente[t.nomeAtendente] = { count: 0, totalTime: 0 };
-    }
-    porAtendente[t.nomeAtendente].count++;
-    porAtendente[t.nomeAtendente].totalTime += t.activeTime;
-  });
-
-  // Por separador
-  const porSeparador = {};
-  filteredTasks.forEach(t => {
-    if (t.nomeSeparador) {
-      if (!porSeparador[t.nomeSeparador]) {
-        porSeparador[t.nomeSeparador] = { count: 0, totalTime: 0 };
+    // Por atendente
+    const porAtendente = {};
+    filteredTasks.forEach(t => {
+      if (!porAtendente[t.nomeAtendente]) {
+        porAtendente[t.nomeAtendente] = { count: 0, totalTime: 0 };
       }
-      porSeparador[t.nomeSeparador].count++;
-      porSeparador[t.nomeSeparador].totalTime += t.activeTime;
-    }
-  });
+      porAtendente[t.nomeAtendente].count++;
+      porAtendente[t.nomeAtendente].totalTime += (t.activeTime || 0);
+    });
 
-  // Ranking de separadores (melhores tempos médios)
-  const rankingSeparadores = Object.entries(porSeparador)
-    .map(([nome, data]) => ({
-      nome,
-      count: data.count,
-      avgTime: data.totalTime / data.count
-    }))
-    .sort((a, b) => a.avgTime - b.avgTime);
+    // Por separador
+    const porSeparador = {};
+    filteredTasks.forEach(t => {
+      if (t.nomeSeparador) {
+        if (!porSeparador[t.nomeSeparador]) {
+          porSeparador[t.nomeSeparador] = { count: 0, totalTime: 0 };
+        }
+        porSeparador[t.nomeSeparador].count++;
+        porSeparador[t.nomeSeparador].totalTime += (t.activeTime || 0);
+      }
+    });
 
-  res.json({
-    periodo: periodo || 'todos',
-    totalTarefas: filteredTasks.length,
-    tempoMedio: avgTime,
-    porAtendente,
-    porSeparador,
-    rankingSeparadores
-  });
+    // Ranking de separadores (melhores tempos médios)
+    const rankingSeparadores = Object.entries(porSeparador)
+      .map(([nome, data]) => ({
+        nome,
+        count: data.count,
+        avgTime: data.totalTime / data.count
+      }))
+      .sort((a, b) => a.avgTime - b.avgTime);
+
+    res.json({
+      periodo: periodo || 'todos',
+      totalTarefas: filteredTasks.length,
+      tempoMedio: avgTime,
+      porAtendente,
+      porSeparador,
+      rankingSeparadores
+    });
+  } catch (error) {
+    console.error('Erro ao obter métricas:', error);
+    res.status(500).json({ error: 'Erro ao obter métricas' });
+  }
 });
 
 // Exportar relatório CSV
-app.get('/api/export/csv', (req, res) => {
-  const { dataInicio, dataFim } = req.query;
+app.get('/api/export/csv', async (req, res) => {
+  try {
+    const { dataInicio, dataFim } = req.query;
 
-  let filteredTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+    let filteredTasks = await database.getCompletedTasks({});
 
-  if (dataInicio) {
-    filteredTasks = filteredTasks.filter(t =>
-      new Date(t.createdAt) >= new Date(dataInicio)
-    );
+    if (dataInicio) {
+      filteredTasks = filteredTasks.filter(t =>
+        new Date(t.createdAt) >= new Date(dataInicio)
+      );
+    }
+
+    if (dataFim) {
+      filteredTasks = filteredTasks.filter(t =>
+        new Date(t.createdAt) <= new Date(dataFim)
+      );
+    }
+
+    // Gerar CSV
+    const headers = 'ID,Atendente,Loja,Separador,Prioridade,Criado em,Iniciado em,Concluído em,Duração,Itens Únicos,Total Itens\n';
+    const rows = filteredTasks.map(t =>
+      `${t.id},${t.nomeAtendente},${t.nomeLoja || ''},${t.nomeSeparador || ''},${t.prioridade},${t.createdAt},${t.startTime || ''},${t.endTime || ''},${t.durationFormatted || ''},${t.uniqueSkus},${t.totalItems}`
+    ).join('\n');
+
+    const csv = headers + rows;
+
+    res.header('Content-Type', 'text/csv');
+    res.header('Content-Disposition', 'attachment; filename=relatorio.csv');
+    res.send(csv);
+  } catch (error) {
+    console.error('Erro ao exportar CSV:', error);
+    res.status(500).json({ error: 'Erro ao gerar relatório CSV' });
   }
-
-  if (dataFim) {
-    filteredTasks = filteredTasks.filter(t =>
-      new Date(t.createdAt) <= new Date(dataFim)
-    );
-  }
-
-  // Gerar CSV
-  const headers = 'ID,Atendente,Loja,Separador,Prioridade,Criado em,Iniciado em,Concluído em,Duração,Itens Únicos,Total Itens\n';
-  const rows = filteredTasks.map(t =>
-    `${t.id},${t.nomeAtendente},${t.nomeLoja},${t.nomeSeparador || ''},${t.prioridade},${t.createdAt},${t.startTime},${t.endTime},${t.durationFormatted},${t.uniqueSkus},${t.totalItems}`
-  ).join('\n');
-
-  const csv = headers + rows;
-
-  res.header('Content-Type', 'text/csv');
-  res.header('Content-Disposition', 'attachment; filename=relatorio.csv');
-  res.send(csv);
 });
 
 // Download de arquivo
@@ -802,9 +845,9 @@ app.get('/api/download/:filename', (req, res) => {
 });
 
 // Exportar tarefa para Excel
-app.get('/api/tasks/:id/export-excel', (req, res) => {
+app.get('/api/tasks/:id/export-excel', async (req, res) => {
   try {
-    const task = tasks.find(t => t.id === req.params.id);
+    const task = await database.getTaskById(req.params.id);
 
     if (!task) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -930,80 +973,86 @@ app.post('/api/auth/admin', (req, res) => {
 });
 
 // Métricas detalhadas para dashboard admin
-app.get('/api/admin/dashboard', (req, res) => {
-  const completedTasks = tasks.filter(t => t.status === 'CONCLUIDO');
+app.get('/api/admin/dashboard', async (req, res) => {
+  try {
+    const allTasks = await database.getAllTasks({});
+    const completedTasks = allTasks.filter(t => t.status === 'CONCLUIDO');
 
-  // Estatísticas por separador
-  const separadorStats = {};
-  completedTasks.forEach(task => {
-    if (task.nomeSeparador) {
-      if (!separadorStats[task.nomeSeparador]) {
-        separadorStats[task.nomeSeparador] = {
-          nome: task.nomeSeparador,
-          totalSeparacoes: 0,
+    // Estatísticas por separador
+    const separadorStats = {};
+    completedTasks.forEach(task => {
+      if (task.nomeSeparador) {
+        if (!separadorStats[task.nomeSeparador]) {
+          separadorStats[task.nomeSeparador] = {
+            nome: task.nomeSeparador,
+            totalSeparacoes: 0,
+            totalItens: 0,
+            tempoTotal: 0,
+            tempos: []
+          };
+        }
+        separadorStats[task.nomeSeparador].totalSeparacoes++;
+        separadorStats[task.nomeSeparador].totalItens += task.totalItems;
+        separadorStats[task.nomeSeparador].tempoTotal += (task.activeTime || 0);
+        separadorStats[task.nomeSeparador].tempos.push(task.activeTime || 0);
+      }
+    });
+
+    // Calcular médias e ordenar
+    const separadores = Object.values(separadorStats).map(sep => ({
+      ...sep,
+      tempoMedio: sep.tempoTotal / sep.totalSeparacoes,
+      tempoMedioFormatado: formatTime(sep.tempoTotal / sep.totalSeparacoes)
+    })).sort((a, b) => b.totalSeparacoes - a.totalSeparacoes);
+
+    // Estatísticas por atendente
+    const atendenteStats = {};
+    allTasks.forEach(task => {
+      if (!atendenteStats[task.nomeAtendente]) {
+        atendenteStats[task.nomeAtendente] = {
+          nome: task.nomeAtendente,
+          totalListas: 0,
           totalItens: 0,
-          tempoTotal: 0,
-          tempos: []
+          listasConcluidas: 0,
+          listasPendentes: 0
         };
       }
-      separadorStats[task.nomeSeparador].totalSeparacoes++;
-      separadorStats[task.nomeSeparador].totalItens += task.totalItems;
-      separadorStats[task.nomeSeparador].tempoTotal += task.activeTime;
-      separadorStats[task.nomeSeparador].tempos.push(task.activeTime);
-    }
-  });
+      atendenteStats[task.nomeAtendente].totalListas++;
+      atendenteStats[task.nomeAtendente].totalItens += task.totalItems;
+      if (task.status === 'CONCLUIDO') {
+        atendenteStats[task.nomeAtendente].listasConcluidas++;
+      } else {
+        atendenteStats[task.nomeAtendente].listasPendentes++;
+      }
+    });
 
-  // Calcular médias e ordenar
-  const separadores = Object.values(separadorStats).map(sep => ({
-    ...sep,
-    tempoMedio: sep.tempoTotal / sep.totalSeparacoes,
-    tempoMedioFormatado: formatTime(sep.tempoTotal / sep.totalSeparacoes)
-  })).sort((a, b) => b.totalSeparacoes - a.totalSeparacoes);
+    const atendentes = Object.values(atendenteStats)
+      .sort((a, b) => b.totalListas - a.totalListas);
 
-  // Estatísticas por atendente
-  const atendenteStats = {};
-  tasks.forEach(task => {
-    if (!atendenteStats[task.nomeAtendente]) {
-      atendenteStats[task.nomeAtendente] = {
-        nome: task.nomeAtendente,
-        totalListas: 0,
-        totalItens: 0,
-        listasConcluidas: 0,
-        listasPendentes: 0
-      };
-    }
-    atendenteStats[task.nomeAtendente].totalListas++;
-    atendenteStats[task.nomeAtendente].totalItens += task.totalItems;
-    if (task.status === 'CONCLUIDO') {
-      atendenteStats[task.nomeAtendente].listasConcluidas++;
-    } else {
-      atendenteStats[task.nomeAtendente].listasPendentes++;
-    }
-  });
+    // Estatísticas gerais
+    const stats = {
+      totalTarefas: allTasks.length,
+      tarefasPendentes: allTasks.filter(t => t.status === 'PENDENTE').length,
+      tarefasEmSeparacao: allTasks.filter(t => t.status === 'EM_SEPARACAO').length,
+      tarefasConcluidas: completedTasks.length,
+      totalItens: allTasks.reduce((sum, t) => sum + t.totalItems, 0),
+      tempoMedioSeparacao: completedTasks.length > 0
+        ? completedTasks.reduce((sum, t) => sum + (t.activeTime || 0), 0) / completedTasks.length
+        : 0
+    };
 
-  const atendentes = Object.values(atendenteStats)
-    .sort((a, b) => b.totalListas - a.totalListas);
-
-  // Estatísticas gerais
-  const stats = {
-    totalTarefas: tasks.length,
-    tarefasPendentes: tasks.filter(t => t.status === 'PENDENTE').length,
-    tarefasEmSeparacao: tasks.filter(t => t.status === 'EM_SEPARACAO').length,
-    tarefasConcluidas: completedTasks.length,
-    totalItens: tasks.reduce((sum, t) => sum + t.totalItems, 0),
-    tempoMedioSeparacao: completedTasks.length > 0
-      ? completedTasks.reduce((sum, t) => sum + t.activeTime, 0) / completedTasks.length
-      : 0
-  };
-
-  res.json({
-    stats,
-    separadores,
-    atendentes,
-    tarefasRecentes: tasks
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 10)
-  });
+    res.json({
+      stats,
+      separadores,
+      atendentes,
+      tarefasRecentes: allTasks
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 10)
+    });
+  } catch (error) {
+    console.error('Erro ao obter dashboard admin:', error);
+    res.status(500).json({ error: 'Erro ao obter métricas do dashboard' });
+  }
 });
 
 // Helper para formatar tempo

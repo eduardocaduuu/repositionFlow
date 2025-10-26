@@ -1,12 +1,40 @@
+# ============================================
+# RENDER STATIC SITE - FRONTEND ONLY
+# ============================================
+# Este arquivo configura o deploy do FRONTEND como Static Site.
+# O backend deve ser deployado separadamente no Koyeb.
+# Veja DEPLOYMENT.md para instruções completas.
+
 services:
-  - type: web
-    name: repositionflow
-    env: node
+  - type: static
+    name: repositionflow-frontend
+    env: static
     region: oregon
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /health
-    envVars:
-      - key: NODE_ENV
-        value: production
+    buildCommand: echo "No build needed for static site"
+    staticPublishPath: public
+
+    # Headers de segurança e otimização
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /config.js
+        name: Cache-Control
+        value: no-cache
+      - path: /*.js
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*.css
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+
+# IMPORTANTE:
+# 1. Após criar o Static Site no Render, você receberá uma URL
+# 2. Use essa URL para configurar FRONTEND_URL no backend do Koyeb
+# 3. Configure o backend primeiro no Koyeb e atualize public/config.js com a URL

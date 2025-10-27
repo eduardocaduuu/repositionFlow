@@ -1498,13 +1498,16 @@ async function confirmAndCreateTask() {
         if (data.success) {
             showToast(`Tarefa criada! ${data.summary.uniqueSkus} SKUs únicos, ${data.summary.totalItems} itens`, 'success');
 
+            // Salvar nome do atendente ANTES de fechar modal (que limpa tempTaskData)
+            const nomeAtendente = state.tempTaskData.nomeAtendente;
+
             // Fechar modal
             closePreviewModal();
 
             // Resetar formulário
             document.getElementById('uploadForm').reset();
             // Restaurar nome do atendente no campo
-            document.getElementById('nomeAtendente').value = state.tempTaskData.nomeAtendente;
+            document.getElementById('nomeAtendente').value = nomeAtendente;
 
             // Voltar para dashboard
             switchView('dashboard');

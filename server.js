@@ -1032,6 +1032,8 @@ app.get('/api/download/:filename', (req, res) => {
 // Exportar tarefa para Excel
 app.get('/api/tasks/:id/export-excel', async (req, res) => {
   try {
+    console.log('📊 [EXCEL EXPORT] Versão simplificada (4 colunas) - Commit: a9983ad');
+
     const task = await database.getTaskById(req.params.id);
 
     if (!task) {
@@ -1054,6 +1056,8 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
       // Headers dos itens - APENAS 4 COLUNAS ESSENCIAIS
       ['SKU', 'Descrição', 'Localização', 'Qtd a Pegar']
     ];
+
+    console.log('📊 [EXCEL EXPORT] Headers configurados: 4 colunas (SKU, Descrição, Localização, Qtd)');
 
     // Adicionar itens - APENAS 4 COLUNAS
     task.items.forEach(item => {

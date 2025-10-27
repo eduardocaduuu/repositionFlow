@@ -11,8 +11,14 @@ const state = {
     currentView: 'dashboard',
     charts: {},
     timers: {},
-    pingInterval: null // Intervalo para heartbeat do WebSocket
+    pingInterval: null, // Intervalo para heartbeat do WebSocket
+    sessionId: generateSessionId() // ID único para esta sessão/aba
 };
+
+// Gerar ID único de sessão
+function generateSessionId() {
+    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
 
 // ==========================================
 // API HELPER
@@ -32,12 +38,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
+    console.log('🔧 Inicializando aplicação - Session ID:', state.sessionId);
+
     // Verificar se há um parâmetro de logout forçado na URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('logout') === 'true') {
+        console.log('🚪 Logout forçado via URL');
         // Limpar tudo e recarregar sem o parâmetro
-        localStorage.clear();
         sessionStorage.clear();
+        localStorage.clear();
         window.history.replaceState({}, document.title, window.location.pathname);
         showRoleSelection();
         setupEventListeners();
@@ -45,20 +54,23 @@ function initializeApp() {
     }
 
     // Check if user is already logged in
-    const savedUser = localStorage.getItem('repositionflow_user');
+    // IMPORTANTE: Usando sessionStorage para sessões independentes por aba/dispositivo
+    const savedUser = sessionStorage.getItem('repositionflow_user');
     if (savedUser) {
         try {
             state.user = JSON.parse(savedUser);
+            console.log('✅ Sessão recuperada:', state.user.role, state.user.name || '(sem nome)');
             showMainApp();
             connectWebSocket();
         } catch (error) {
             // Se houver erro ao parsear, limpar e mostrar tela de login
-            console.error('Erro ao carregar usuário salvo:', error);
-            localStorage.clear();
+            console.error('❌ Erro ao carregar usuário salvo:', error);
             sessionStorage.clear();
+            localStorage.clear();
             showRoleSelection();
         }
     } else {
+        console.log('🆕 Nova sessão - sem usuário salvo');
         showRoleSelection();
     }
 
@@ -130,7 +142,8 @@ async function handleRoleSubmit(e) {
 
     // Para atendente e separador, entrar direto (sem nome ainda)
     state.user = { role };
-    localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+    sessionStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+    console.log('👤 Usuário logado como:', role, '- Session ID:', state.sessionId);
 
     hideElement('roleSelectionScreen');
     showMainApp();
@@ -153,7 +166,7 @@ async function handleAdminLogin(e) {
 
         if (data.success) {
             state.user = { name: 'Administrador', role: 'admin', token: data.token };
-            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+            sessionStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
             hideElement('adminLoginScreen');
             showMainApp();
@@ -185,9 +198,9 @@ function handleLogout() {
     Object.values(state.timers).forEach(timer => clearInterval(timer));
     state.timers = {};
 
-    // Limpar completamente o localStorage e sessionStorage
-    localStorage.clear();
+    // Limpar completamente o sessionStorage e localStorage
     sessionStorage.clear();
+    localStorage.clear();
 
     // Resetar estado
     state.user = null;
@@ -864,7 +877,7 @@ async function startTask(taskId) {
 
             // Salvar nome do separador no estado
             state.user.name = nomeSeparador;
-            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+            sessionStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
             // Atualizar display do usuário
             const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };
@@ -1096,7 +1109,7 @@ async function handleUploadForm(e) {
         if (data.success) {
             // Salvar nome do atendente no estado do usuário
             state.user.name = nomeAtendente;
-            localStorage.setItem('repositionflow_user', JSON.stringify(state.user));
+            sessionStorage.setItem('repositionflow_user', JSON.stringify(state.user));
 
             // Atualizar display do usuário
             const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };

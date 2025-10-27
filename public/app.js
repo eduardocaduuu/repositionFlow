@@ -388,17 +388,6 @@ async function loadTasks() {
         if (dataInicio) params.append('dataInicio', dataInicio);
         if (dataFim) params.append('dataFim', dataFim);
 
-        // Adicionar role e userName para filtrar tarefas ocultas (exceto admin)
-        if (state.user && state.user.role !== 'admin') {
-            params.append('role', state.user.role);
-            if (state.user.name) {
-                params.append('userName', state.user.name);
-            } else if (state.user.role === 'atendente' || state.user.role === 'separador') {
-                // Se não tem nome ainda, usar role como identificador temporário
-                params.append('userName', state.user.role);
-            }
-        }
-
         const response = await fetch(apiUrl(`/api/tasks?${params}`));
 
         if (!response.ok) {
@@ -698,12 +687,6 @@ function renderTaskModal(task) {
                 📥 Exportar para Excel
             </button>
 
-            ${(state.user.role === 'separador' || state.user.role === 'atendente') && task.status !== 'CANCELADA' ? `
-                <button class="btn btn-secondary" onclick="hideTask('${task.id}')">
-                    👁️ Ocultar Tarefa
-                </button>
-            ` : ''}
-
             ${state.user.role === 'atendente' && task.nomeAtendente === state.user.name && task.status !== 'CONCLUIDO' && task.status !== 'CANCELADA' ? `
                 <button class="btn btn-danger" onclick="cancelTask('${task.id}')">
                     ❌ Cancelar Tarefa
@@ -959,37 +942,6 @@ async function exportTaskToExcel(taskId) {
     } catch (error) {
         console.error('Erro ao exportar:', error);
         showToast('Erro ao exportar', 'error');
-    }
-}
-
-async function hideTask(taskId) {
-    if (!confirm('Deseja ocultar esta tarefa do seu dashboard? A tarefa não será deletada, apenas ficará oculta para você.')) {
-        return;
-    }
-
-    try {
-        const userName = state.user.name || state.user.role;
-        const response = await fetch(apiUrl(`/api/tasks/${taskId}/hide`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                role: state.user.role,
-                userName: userName
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showToast('Tarefa ocultada do seu dashboard', 'success');
-            closeModal();
-            loadTasks();
-        } else {
-            showToast(data.error || 'Erro ao ocultar tarefa', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao ocultar tarefa:', error);
-        showToast('Erro ao ocultar tarefa', 'error');
     }
 }
 

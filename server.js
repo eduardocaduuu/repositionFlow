@@ -449,7 +449,7 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
 app.get('/api/tasks', async (req, res) => {
   try {
     console.log('📋 GET /api/tasks - Iniciando busca de tarefas...');
-    const { status, atendente, dataInicio, dataFim, role, userName } = req.query;
+    const { status, atendente, dataInicio, dataFim } = req.query;
 
     // Buscar tarefas do database
     const filters = {};
@@ -472,16 +472,6 @@ app.get('/api/tasks', async (req, res) => {
       filteredTasks = filteredTasks.filter(t =>
         new Date(t.createdAt) <= new Date(dataFim)
       );
-    }
-
-    // Filtrar tarefas ocultas (apenas para separador e atendente, admin vê todas)
-    if (role && role !== 'admin' && userName) {
-      filteredTasks = filteredTasks.filter(t => {
-        const hiddenFor = t.hiddenFor || [];
-        // Verificar se a tarefa está oculta para este usuário
-        const isHidden = hiddenFor.some(h => h.role === role && h.name === userName);
-        return !isHidden;
-      });
     }
 
     console.log(`📤 Retornando ${filteredTasks.length} tarefas`);
@@ -1030,45 +1020,6 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
   } catch (error) {
     console.error('Erro ao exportar tarefa para Excel:', error);
     res.status(500).json({ error: 'Erro ao gerar arquivo Excel' });
-  }
-});
-
-// Ocultar tarefa para usuário específico
-app.post('/api/tasks/:id/hide', async (req, res) => {
-  try {
-    const { role, userName } = req.body;
-    const task = await database.getTaskById(req.params.id);
-
-    if (!task) {
-      return res.status(404).json({ error: 'Tarefa não encontrada' });
-    }
-
-    if (!role || !userName) {
-      return res.status(400).json({ error: 'Role e userName são obrigatórios' });
-    }
-
-    // Admin não pode ocultar tarefas
-    if (role === 'admin') {
-      return res.status(403).json({ error: 'Administradores não podem ocultar tarefas' });
-    }
-
-    const hiddenFor = task.hiddenFor || [];
-
-    // Verificar se já está oculta para este usuário
-    const alreadyHidden = hiddenFor.some(h => h.role === role && h.name === userName);
-    if (alreadyHidden) {
-      return res.status(400).json({ error: 'Tarefa já está oculta para você' });
-    }
-
-    // Adicionar à lista de ocultos
-    hiddenFor.push({ role, name: userName, hiddenAt: new Date().toISOString() });
-
-    await database.updateTask(req.params.id, { hiddenFor });
-
-    res.json({ success: true, message: 'Tarefa ocultada com sucesso' });
-  } catch (error) {
-    console.error('Erro ao ocultar tarefa:', error);
-    res.status(500).json({ error: 'Erro ao ocultar tarefa' });
   }
 });
 

@@ -1248,7 +1248,7 @@ function showPreviewModal(data) {
 
     console.log('🚪 Exibindo modal...');
     // Mostrar modal
-    showElement('previewModal');
+    modal.classList.add('active');
 
     console.log('✅ showPreviewModal concluída. Modal class:', modal.className);
 }
@@ -1335,7 +1335,8 @@ function updateConfirmButtonState() {
 }
 
 function closePreviewModal() {
-    hideElement('previewModal');
+    const modal = document.getElementById('previewModal');
+    modal.classList.remove('active');
     // Limpar dados temporários
     state.tempTaskData = null;
 }

@@ -79,7 +79,6 @@ function broadcast(message, filterRole = null) {
 
 // Validar colunas obrigatórias da planilha
 function validateExcelColumns(worksheet) {
-  const requiredColumns = ['Cod Material', 'Desc Material', 'pegar'];
   const headers = [];
 
   const range = xlsx.utils.decode_range(worksheet['!ref']);
@@ -91,12 +90,38 @@ function validateExcelColumns(worksheet) {
     }
   }
 
-  const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+  // Verificar se existem variações das colunas obrigatórias
+  const requiredColumnsVariations = {
+    'Cod Material': ['Cod Material', 'Código Material', 'Codigo Material', 'SKU', 'Cód Material'],
+    'Desc Material': ['Desc Material', 'Descrição', 'Descricao', 'Descrição Material', 'Descricao Material', 'Material'],
+    'Quantidade': ['pegar', 'Quantidade', 'Qtd', 'Quantidade Solicitada', 'Quantidade Requerida', 'Qtd Solicitada', 'Qtd Requerida', 'Quantidade a Pegar', 'Qtd a Pegar']
+  };
+
+  const missingColumns = [];
+  const foundColumns = {};
+
+  // Verificar cada grupo de colunas obrigatórias
+  for (const [key, variations] of Object.entries(requiredColumnsVariations)) {
+    const found = variations.some(variation =>
+      headers.some(header => header.toLowerCase() === variation.toLowerCase())
+    );
+
+    if (!found) {
+      missingColumns.push(key);
+    } else {
+      // Encontrar qual variação foi encontrada
+      const foundVariation = variations.find(variation =>
+        headers.some(header => header.toLowerCase() === variation.toLowerCase())
+      );
+      foundColumns[key] = foundVariation;
+    }
+  }
 
   return {
     valid: missingColumns.length === 0,
     missingColumns,
-    headers
+    headers,
+    foundColumns
   };
 }
 
@@ -130,8 +155,16 @@ function processExcel(filePath) {
   // Processar items e normalizar colunas
   const itemsMap = new Map();
   data.forEach(row => {
-    const sku = row['Cod Material']?.toString() || '';
-    const quantidadePegar = parseInt(row['pegar']) || 0;
+    // Buscar SKU com múltiplas variações
+    const sku = getColumnValue(row, [
+      'Cod Material', 'Código Material', 'Codigo Material', 'SKU', 'Cód Material'
+    ])?.toString() || '';
+
+    // Buscar quantidade com múltiplas variações
+    const quantidadePegar = parseInt(getColumnValue(row, [
+      'pegar', 'Quantidade', 'Qtd', 'Quantidade Solicitada', 'Quantidade Requerida',
+      'Qtd Solicitada', 'Qtd Requerida', 'Quantidade a Pegar', 'Qtd a Pegar'
+    ])) || 0;
 
     // Pular linhas sem SKU ou sem quantidade
     if (!sku || quantidadePegar <= 0) return;
@@ -178,9 +211,15 @@ function processExcel(filePath) {
         'Estoque alocado'
       ]) || 0;
 
+      // Buscar descrição com múltiplas variações
+      const descricao = getColumnValue(row, [
+        'Desc Material', 'Descrição', 'Descricao', 'Descrição Material',
+        'Descricao Material', 'Material'
+      ]) || 'Sem descrição';
+
       itemsMap.set(sku, {
         sku: sku,
-        descricao: row['Desc Material'] || 'Sem descrição',
+        descricao: descricao,
         quantidade_pegar: quantidadePegar,
         localizacao: localizacao,
         // Informações de estoque (opcional) - agora aceita múltiplas variações

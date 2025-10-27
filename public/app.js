@@ -32,12 +32,32 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
+    // Verificar se há um parâmetro de logout forçado na URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('logout') === 'true') {
+        // Limpar tudo e recarregar sem o parâmetro
+        localStorage.clear();
+        sessionStorage.clear();
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showRoleSelection();
+        setupEventListeners();
+        return;
+    }
+
     // Check if user is already logged in
     const savedUser = localStorage.getItem('repositionflow_user');
     if (savedUser) {
-        state.user = JSON.parse(savedUser);
-        showMainApp();
-        connectWebSocket();
+        try {
+            state.user = JSON.parse(savedUser);
+            showMainApp();
+            connectWebSocket();
+        } catch (error) {
+            // Se houver erro ao parsear, limpar e mostrar tela de login
+            console.error('Erro ao carregar usuário salvo:', error);
+            localStorage.clear();
+            sessionStorage.clear();
+            showRoleSelection();
+        }
     } else {
         showRoleSelection();
     }
@@ -149,32 +169,64 @@ async function handleAdminLogin(e) {
 }
 
 function handleLogout() {
-    if (state.ws) state.ws.close();
-    localStorage.removeItem('repositionflow_user');
+    // Fechar WebSocket
+    if (state.ws) {
+        state.ws.close();
+        state.ws = null;
+    }
+
+    // Limpar intervalo de ping
+    if (state.pingInterval) {
+        clearInterval(state.pingInterval);
+        state.pingInterval = null;
+    }
+
+    // Limpar todos os timers
+    Object.values(state.timers).forEach(timer => clearInterval(timer));
+    state.timers = {};
+
+    // Limpar completamente o localStorage e sessionStorage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Resetar estado
     state.user = null;
     state.tasks = [];
 
-    // Destroy all charts
-    Object.values(state.charts).forEach(chart => chart.destroy());
+    // Destruir todos os gráficos
+    Object.values(state.charts).forEach(chart => {
+        try {
+            chart.destroy();
+        } catch (error) {
+            console.error('Erro ao destruir gráfico:', error);
+        }
+    });
     state.charts = {};
 
-    // Hide all views
+    // Esconder todas as views
     hideElement('mainApp');
     hideElement('dashboard');
     hideElement('nova-tarefa');
     hideElement('metricas');
     hideElement('admin-dashboard');
 
-    // Hide all conditional buttons
+    // Esconder botões condicionais
     hideElement('novaTarefaBtn');
     hideElement('metricasBtn');
     hideElement('adminDashboardBtn');
 
+    // Mostrar tela de seleção
     showElement('roleSelectionScreen');
 
-    // Reset forms
-    document.getElementById('roleForm').reset();
+    // Resetar formulários
+    document.getElementById('roleForm')?.reset();
     document.getElementById('adminLoginForm')?.reset();
+    document.getElementById('uploadForm')?.reset();
+
+    // Recarregar a página para garantir limpeza completa
+    setTimeout(() => {
+        window.location.href = window.location.pathname;
+    }, 100);
 }
 
 function showMainApp() {

@@ -329,6 +329,12 @@
                     </div>
                     <div class="chart-container">
                         <div class="chart-header">
+                            <h3 class="chart-title">📦 Top 5 Separadores - Itens Separados</h3>
+                        </div>
+                        <canvas id="chartItensSeparadores"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
                             <h3 class="chart-title">⏱️ Tempo Médio por Separador</h3>
                         </div>
                         <canvas id="chartTemposSeparadores"></canvas>
@@ -350,7 +356,7 @@
                 <!-- Tabelas Detalhadas -->
                 <div class="grid grid-cols-2" style="margin-top: 2rem;">
                     <div class="glass-card">
-                        <h3 style="margin-bottom: 1.5rem; color: var(--accent-green);">🏆 Separadores - Ranking Completo</h3>
+                        <h3 style="margin-bottom: 1.5rem; color: var(--accent-green);">🏆 Separadores - Ranking por Eficiência</h3>
                         <div class="table-container">
                             <table>
                                 <thead>
@@ -359,12 +365,13 @@
                                         <th>Nome</th>
                                         <th>Separações</th>
                                         <th>Itens</th>
+                                        <th>Eficiência</th>
                                         <th>Tempo Médio</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tableSeparadores">
                                     <tr>
-                                        <td colspan="5" style="text-align: center; color: var(--text-secondary);">
+                                        <td colspan="6" style="text-align: center; color: var(--text-secondary);">
                                             Carregando...
                                         </td>
                                     </tr>

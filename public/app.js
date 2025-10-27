@@ -1699,10 +1699,29 @@ function renderAdminCharts(data) {
         });
     }
 
-    // Chart 2: Tempo Médio por Separador
+    // Chart 2: Top 5 Separadores - Itens Separados
     if (top5Separadores.length > 0) {
-        const ctx2 = document.getElementById('chartTemposSeparadores');
-        state.charts.tempos = new Chart(ctx2, {
+        const ctx2 = document.getElementById('chartItensSeparadores');
+        state.charts.itensSeparadores = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: top5Separadores.map(s => s.nome),
+                datasets: [{
+                    label: 'Total de Itens Separados',
+                    data: top5Separadores.map(s => s.totalItens),
+                    backgroundColor: chartColors.secondary,
+                    borderColor: chartColors.secondary,
+                    borderWidth: 1
+                }]
+            },
+            options: getChartOptions('bar')
+        });
+    }
+
+    // Chart 3: Tempo Médio por Separador
+    if (top5Separadores.length > 0) {
+        const ctx3 = document.getElementById('chartTemposSeparadores');
+        state.charts.tempos = new Chart(ctx3, {
             type: 'line',
             data: {
                 labels: top5Separadores.map(s => s.nome),
@@ -1720,11 +1739,11 @@ function renderAdminCharts(data) {
         });
     }
 
-    // Chart 3: Top 5 Atendentes - Listas
+    // Chart 4: Top 5 Atendentes - Listas
     const top5Atendentes = data.atendentes.slice(0, 5);
     if (top5Atendentes.length > 0) {
-        const ctx3 = document.getElementById('chartAtendentes');
-        state.charts.atendentes = new Chart(ctx3, {
+        const ctx4 = document.getElementById('chartAtendentes');
+        state.charts.atendentes = new Chart(ctx4, {
             type: 'doughnut',
             data: {
                 labels: top5Atendentes.map(a => a.nome),
@@ -1743,10 +1762,10 @@ function renderAdminCharts(data) {
         });
     }
 
-    // Chart 4: Total de Itens por Atendente
+    // Chart 5: Total de Itens por Atendente
     if (top5Atendentes.length > 0) {
-        const ctx4 = document.getElementById('chartItensAtendentes');
-        state.charts.itens = new Chart(ctx4, {
+        const ctx5 = document.getElementById('chartItensAtendentes');
+        state.charts.itens = new Chart(ctx5, {
             type: 'bar',
             data: {
                 labels: top5Atendentes.map(a => a.nome),
@@ -1811,7 +1830,7 @@ function renderAdminTables(data) {
     // Table Separadores
     const tableSeparadores = document.getElementById('tableSeparadores');
     if (data.separadores.length === 0) {
-        tableSeparadores.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Nenhum dado disponível</td></tr>';
+        tableSeparadores.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">Nenhum dado disponível</td></tr>';
     } else {
         tableSeparadores.innerHTML = data.separadores.map((sep, index) => `
             <tr>
@@ -1819,6 +1838,7 @@ function renderAdminTables(data) {
                 <td>${sep.nome}</td>
                 <td>${sep.totalSeparacoes}</td>
                 <td>${sep.totalItens}</td>
+                <td style="font-weight: 600; color: var(--accent-green);">${sep.eficienciaFormatada}</td>
                 <td>${sep.tempoMedioFormatado}</td>
             </tr>
         `).join('');

@@ -1276,12 +1276,20 @@ app.get('/api/admin/dashboard', async (req, res) => {
       }
     });
 
-    // Calcular médias e ordenar
-    const separadores = Object.values(separadorStats).map(sep => ({
-      ...sep,
-      tempoMedio: sep.tempoTotal / sep.totalSeparacoes,
-      tempoMedioFormatado: formatTime(sep.tempoTotal / sep.totalSeparacoes)
-    })).sort((a, b) => b.totalSeparacoes - a.totalSeparacoes);
+    // Calcular médias, eficiência e ordenar por eficiência (mais itens em menos tempo)
+    const separadores = Object.values(separadorStats).map(sep => {
+      const tempoMedio = sep.tempoTotal / sep.totalSeparacoes;
+      // Eficiência: itens por minuto (quanto maior, melhor)
+      const eficiencia = sep.tempoTotal > 0 ? (sep.totalItens / (sep.tempoTotal / 60)) : 0;
+
+      return {
+        ...sep,
+        tempoMedio,
+        tempoMedioFormatado: formatTime(tempoMedio),
+        eficiencia: eficiencia.toFixed(2), // itens/minuto
+        eficienciaFormatada: `${eficiencia.toFixed(1)} itens/min`
+      };
+    }).sort((a, b) => b.eficiencia - a.eficiencia); // Ordenar por eficiência (maior = melhor)
 
     // Estatísticas por atendente
     const atendenteStats = {};

@@ -946,7 +946,8 @@ async function markItem(taskId, sku, status) {
 
 async function exportTaskToExcel(taskId) {
     try {
-        window.location.href = `/api/tasks/${taskId}/export-excel`;
+        // Usar URL completa do backend (Koyeb) para exportação
+        window.location.href = apiUrl(`/api/tasks/${taskId}/export-excel`);
         showToast('Download iniciado!', 'success');
     } catch (error) {
         console.error('Erro ao exportar:', error);

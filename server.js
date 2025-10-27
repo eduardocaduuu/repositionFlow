@@ -91,10 +91,10 @@ function validateExcelColumns(worksheet) {
   }
 
   // Verificar se existem variações das colunas obrigatórias
+  // NOTA: Quantidade NÃO é obrigatória, pois será preenchida pelo atendente na tela de preview
   const requiredColumnsVariations = {
     'Cod Material': ['Cod Material', 'Código Material', 'Codigo Material', 'SKU', 'Cód Material'],
-    'Desc Material': ['Desc Material', 'Descrição', 'Descricao', 'Descrição Material', 'Descricao Material', 'Material'],
-    'Quantidade': ['pegar', 'Quantidade', 'Qtd', 'Quantidade Solicitada', 'Quantidade Requerida', 'Qtd Solicitada', 'Qtd Requerida', 'Quantidade a Pegar', 'Qtd a Pegar']
+    'Desc Material': ['Desc Material', 'Descrição', 'Descricao', 'Descrição Material', 'Descricao Material', 'Material']
   };
 
   const missingColumns = [];
@@ -160,14 +160,15 @@ function processExcel(filePath) {
       'Cod Material', 'Código Material', 'Codigo Material', 'SKU', 'Cód Material'
     ])?.toString() || '';
 
-    // Buscar quantidade com múltiplas variações
+    // Buscar quantidade com múltiplas variações (OPCIONAL - pode não existir na planilha)
+    // Se não existir, será preenchida pelo atendente na tela de preview
     const quantidadePegar = parseInt(getColumnValue(row, [
       'pegar', 'Quantidade', 'Qtd', 'Quantidade Solicitada', 'Quantidade Requerida',
       'Qtd Solicitada', 'Qtd Requerida', 'Quantidade a Pegar', 'Qtd a Pegar'
     ])) || 0;
 
-    // Pular linhas sem SKU ou sem quantidade
-    if (!sku || quantidadePegar <= 0) return;
+    // Pular apenas linhas sem SKU
+    if (!sku) return;
 
     if (itemsMap.has(sku)) {
       // Se SKU duplicado, somar quantidades

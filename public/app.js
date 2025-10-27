@@ -1163,6 +1163,8 @@ function showPreviewModal(data) {
         tr.dataset.index = index;
 
         const isValid = item.quantidade_pegar <= item.total_disponivel || item.total_disponivel === 0;
+        const needsInput = item.quantidade_pegar === 0; // Destacar campos que precisam ser preenchidos
+
         if (!isValid) {
             tr.classList.add('invalid-row');
         }
@@ -1176,19 +1178,20 @@ function showPreviewModal(data) {
             <td>
                 <input
                     type="number"
-                    class="preview-qty-input ${!isValid ? 'invalid' : ''}"
+                    class="preview-qty-input ${!isValid ? 'invalid' : ''} ${needsInput ? 'needs-input' : ''}"
                     data-index="${index}"
                     data-max="${item.total_disponivel}"
                     value="${item.quantidade_pegar}"
                     min="0"
                     step="1"
+                    placeholder="Digite a quantidade"
                     required
                 />
             </td>
             <td style="font-size: 0.85rem;">${item.localizacao}</td>
             <td style="text-align: center;">
-                <span class="preview-status-badge ${isValid ? 'valid' : 'invalid'}">
-                    ${isValid ? '✓' : '⚠️'}
+                <span class="preview-status-badge ${needsInput ? 'warning' : (isValid ? 'valid' : 'invalid')}">
+                    ${needsInput ? '✏️' : (isValid ? '✓' : '⚠️')}
                 </span>
             </td>
         `;
@@ -1222,20 +1225,31 @@ function handleQuantityChange(e) {
 
     // Validar
     const isValid = value <= maxAvailable || maxAvailable === 0;
+    const needsInput = value === 0;
 
     // Atualizar classes de validação
-    if (isValid) {
-        input.classList.remove('invalid');
-        row.classList.remove('invalid-row');
-    } else {
+    input.classList.remove('invalid', 'needs-input');
+    row.classList.remove('invalid-row');
+
+    if (!isValid) {
         input.classList.add('invalid');
         row.classList.add('invalid-row');
+    } else if (needsInput) {
+        input.classList.add('needs-input');
     }
 
     // Atualizar badge de status
     const badge = row.querySelector('.preview-status-badge');
-    badge.className = `preview-status-badge ${isValid ? 'valid' : 'invalid'}`;
-    badge.textContent = isValid ? '✓' : '⚠️';
+    if (needsInput) {
+        badge.className = 'preview-status-badge warning';
+        badge.textContent = '✏️';
+    } else if (isValid) {
+        badge.className = 'preview-status-badge valid';
+        badge.textContent = '✓';
+    } else {
+        badge.className = 'preview-status-badge invalid';
+        badge.textContent = '⚠️';
+    }
 
     // Recalcular totais
     updatePreviewTotals();
@@ -1251,16 +1265,27 @@ function updatePreviewTotals() {
 
 function updateConfirmButtonState() {
     const btnConfirm = document.getElementById('btnConfirmPreview');
+
+    // Verificar se há itens com quantidade inválida (maior que disponível)
     const hasInvalidItems = state.tempTaskData.items.some(item => {
         const max = item.total_disponivel;
         return item.quantidade_pegar > max && max > 0;
     });
 
+    // Verificar se há pelo menos um item com quantidade > 0
+    const hasAtLeastOneItem = state.tempTaskData.items.some(item => item.quantidade_pegar > 0);
+
+    // Bloquear se houver itens inválidos OU se nenhum item tiver quantidade
     if (hasInvalidItems) {
         btnConfirm.disabled = true;
         btnConfirm.style.opacity = '0.5';
         btnConfirm.style.cursor = 'not-allowed';
         btnConfirm.title = 'Corrija os itens com quantidade inválida antes de confirmar';
+    } else if (!hasAtLeastOneItem) {
+        btnConfirm.disabled = true;
+        btnConfirm.style.opacity = '0.5';
+        btnConfirm.style.cursor = 'not-allowed';
+        btnConfirm.title = 'Preencha a quantidade de pelo menos um item';
     } else {
         btnConfirm.disabled = false;
         btnConfirm.style.opacity = '1';
@@ -1284,8 +1309,16 @@ async function confirmAndCreateTask() {
         return item.quantidade_pegar > max && max > 0;
     });
 
+    // Verificar se há pelo menos um item com quantidade > 0
+    const hasAtLeastOneItem = state.tempTaskData.items.some(item => item.quantidade_pegar > 0);
+
     if (hasInvalidItems) {
         showToast('Corrija os itens com quantidade inválida antes de confirmar', 'error');
+        return;
+    }
+
+    if (!hasAtLeastOneItem) {
+        showToast('Preencha a quantidade de pelo menos um item', 'error');
         return;
     }
 

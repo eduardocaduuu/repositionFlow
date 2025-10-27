@@ -887,6 +887,26 @@ input[type="date"]:hover::-moz-calendar-picker-indicator {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
+.preview-table input[type="number"].needs-input {
+    border-color: var(--status-warning);
+    background: rgba(251, 191, 36, 0.05);
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+.preview-table input[type="number"].needs-input:focus {
+    border-color: var(--status-warning);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        border-color: var(--status-warning);
+    }
+    50% {
+        border-color: rgba(251, 191, 36, 0.5);
+    }
+}
+
 .preview-status-badge {
     display: inline-flex;
     align-items: center;

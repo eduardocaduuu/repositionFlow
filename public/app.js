@@ -1093,13 +1093,14 @@ async function handleUploadForm(e) {
     }
 
     const formData = new FormData();
-    formData.append('nomeAtendente', nomeAtendente);
-    formData.append('prioridade', prioridade);
-    formData.append('observacoes', observacoes);
     formData.append('planilha', file);
 
     try {
-        const response = await fetch(apiUrl('/api/tasks'), {
+        // Mostrar loading
+        showToast('Processando planilha...', 'info');
+
+        // Chamar endpoint de preview
+        const response = await fetch(apiUrl('/api/tasks/preview'), {
             method: 'POST',
             body: formData
         });
@@ -1107,6 +1108,16 @@ async function handleUploadForm(e) {
         const data = await response.json();
 
         if (data.success) {
+            // Salvar dados temporários para usar ao confirmar
+            state.tempTaskData = {
+                nomeAtendente,
+                prioridade,
+                observacoes,
+                items: data.items,
+                originalFilename: data.filename,
+                summary: data.summary
+            };
+
             // Salvar nome do atendente no estado do usuário
             state.user.name = nomeAtendente;
             sessionStorage.setItem('repositionflow_user', JSON.stringify(state.user));
@@ -1115,17 +1126,211 @@ async function handleUploadForm(e) {
             const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };
             document.getElementById('userDisplay').textContent = `${roleEmoji[state.user.role]} ${state.user.name}`;
 
-            showToast(`Tarefa criada! ${data.summary.uniqueSkus} SKUs únicos, ${data.summary.totalItems} itens`, 'success');
-            document.getElementById('uploadForm').reset();
-            // Restaurar nome do atendente no campo
-            document.getElementById('nomeAtendente').value = nomeAtendente;
-            switchView('dashboard');
+            // Mostrar modal de preview
+            showPreviewModal(data);
         } else {
             showToast(data.error, 'error');
         }
     } catch (error) {
-        console.error('Erro ao enviar planilha:', error);
-        showToast('Erro ao enviar planilha', 'error');
+        console.error('Erro ao processar planilha:', error);
+        showToast('Erro ao processar planilha', 'error');
+    }
+}
+
+// ==========================================
+// PREVIEW MODAL - Edição da Planilha
+// ==========================================
+
+function showPreviewModal(data) {
+    const modal = document.getElementById('previewModal');
+    const tbody = document.getElementById('previewTableBody');
+    const totalSkusEl = document.getElementById('previewTotalSkus');
+    const totalItemsEl = document.getElementById('previewTotalItems');
+
+    // Atualizar resumo
+    totalSkusEl.textContent = data.summary.uniqueSkus;
+
+    // Calcular total de itens
+    const totalItems = data.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
+    totalItemsEl.textContent = totalItems;
+
+    // Limpar tabela
+    tbody.innerHTML = '';
+
+    // Preencher tabela
+    data.items.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.dataset.index = index;
+
+        const isValid = item.quantidade_pegar <= item.total_disponivel || item.total_disponivel === 0;
+        if (!isValid) {
+            tr.classList.add('invalid-row');
+        }
+
+        tr.innerHTML = `
+            <td>${item.sku}</td>
+            <td title="${item.descricao}">${item.descricao}</td>
+            <td style="text-align: center; font-weight: 600; color: ${item.total_disponivel > 0 ? 'var(--status-success)' : 'var(--status-warning)'};">
+                ${item.total_disponivel || 'N/A'}
+            </td>
+            <td>
+                <input
+                    type="number"
+                    class="preview-qty-input ${!isValid ? 'invalid' : ''}"
+                    data-index="${index}"
+                    data-max="${item.total_disponivel}"
+                    value="${item.quantidade_pegar}"
+                    min="0"
+                    step="1"
+                    required
+                />
+            </td>
+            <td style="font-size: 0.85rem;">${item.localizacao}</td>
+            <td style="text-align: center;">
+                <span class="preview-status-badge ${isValid ? 'valid' : 'invalid'}">
+                    ${isValid ? '✓' : '⚠️'}
+                </span>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    // Adicionar event listeners para inputs
+    document.querySelectorAll('.preview-qty-input').forEach(input => {
+        input.addEventListener('input', handleQuantityChange);
+    });
+
+    // Event listeners para botões
+    document.getElementById('btnCancelPreview').onclick = closePreviewModal;
+    document.getElementById('closePreviewModal').onclick = closePreviewModal;
+    document.getElementById('btnConfirmPreview').onclick = confirmAndCreateTask;
+
+    // Mostrar modal
+    showElement('previewModal');
+}
+
+function handleQuantityChange(e) {
+    const input = e.target;
+    const index = parseInt(input.dataset.index);
+    const maxAvailable = parseInt(input.dataset.max);
+    const value = parseInt(input.value) || 0;
+    const row = input.closest('tr');
+
+    // Atualizar valor no state temporário
+    state.tempTaskData.items[index].quantidade_pegar = value;
+
+    // Validar
+    const isValid = value <= maxAvailable || maxAvailable === 0;
+
+    // Atualizar classes de validação
+    if (isValid) {
+        input.classList.remove('invalid');
+        row.classList.remove('invalid-row');
+    } else {
+        input.classList.add('invalid');
+        row.classList.add('invalid-row');
+    }
+
+    // Atualizar badge de status
+    const badge = row.querySelector('.preview-status-badge');
+    badge.className = `preview-status-badge ${isValid ? 'valid' : 'invalid'}`;
+    badge.textContent = isValid ? '✓' : '⚠️';
+
+    // Recalcular totais
+    updatePreviewTotals();
+
+    // Atualizar estado do botão de confirmação
+    updateConfirmButtonState();
+}
+
+function updatePreviewTotals() {
+    const totalItems = state.tempTaskData.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
+    document.getElementById('previewTotalItems').textContent = totalItems;
+}
+
+function updateConfirmButtonState() {
+    const btnConfirm = document.getElementById('btnConfirmPreview');
+    const hasInvalidItems = state.tempTaskData.items.some(item => {
+        const max = item.total_disponivel;
+        return item.quantidade_pegar > max && max > 0;
+    });
+
+    if (hasInvalidItems) {
+        btnConfirm.disabled = true;
+        btnConfirm.style.opacity = '0.5';
+        btnConfirm.style.cursor = 'not-allowed';
+        btnConfirm.title = 'Corrija os itens com quantidade inválida antes de confirmar';
+    } else {
+        btnConfirm.disabled = false;
+        btnConfirm.style.opacity = '1';
+        btnConfirm.style.cursor = 'pointer';
+        btnConfirm.title = '';
+    }
+}
+
+function closePreviewModal() {
+    hideElement('previewModal');
+    // Limpar dados temporários
+    state.tempTaskData = null;
+}
+
+async function confirmAndCreateTask() {
+    const btnConfirm = document.getElementById('btnConfirmPreview');
+
+    // Verificar se há itens inválidos
+    const hasInvalidItems = state.tempTaskData.items.some(item => {
+        const max = item.total_disponivel;
+        return item.quantidade_pegar > max && max > 0;
+    });
+
+    if (hasInvalidItems) {
+        showToast('Corrija os itens com quantidade inválida antes de confirmar', 'error');
+        return;
+    }
+
+    // Desabilitar botão durante o envio
+    btnConfirm.disabled = true;
+    btnConfirm.textContent = '⏳ Criando tarefa...';
+
+    try {
+        const formData = new FormData();
+        formData.append('nomeAtendente', state.tempTaskData.nomeAtendente);
+        formData.append('prioridade', state.tempTaskData.prioridade);
+        formData.append('observacoes', state.tempTaskData.observacoes);
+        formData.append('items', JSON.stringify(state.tempTaskData.items));
+        formData.append('originalFilename', state.tempTaskData.originalFilename);
+
+        const response = await fetch(apiUrl('/api/tasks'), {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`Tarefa criada! ${data.summary.uniqueSkus} SKUs únicos, ${data.summary.totalItems} itens`, 'success');
+
+            // Fechar modal
+            closePreviewModal();
+
+            // Resetar formulário
+            document.getElementById('uploadForm').reset();
+            // Restaurar nome do atendente no campo
+            document.getElementById('nomeAtendente').value = state.tempTaskData.nomeAtendente;
+
+            // Voltar para dashboard
+            switchView('dashboard');
+        } else {
+            showToast(data.error, 'error');
+            btnConfirm.disabled = false;
+            btnConfirm.textContent = '✅ Confirmar e Criar Tarefa';
+        }
+    } catch (error) {
+        console.error('Erro ao criar tarefa:', error);
+        showToast('Erro ao criar tarefa', 'error');
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = '✅ Confirmar e Criar Tarefa';
     }
 }
 

@@ -815,3 +815,119 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator,
 input[type="date"]:hover::-moz-calendar-picker-indicator {
     opacity: 1;
 }
+
+/* ==========================================
+   PREVIEW TABLE - Tabela Editável de Preview
+   ========================================== */
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.preview-table th {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 1rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.preview-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.preview-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.preview-table tbody tr.invalid-row {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid var(--status-danger);
+}
+
+.preview-table td {
+    padding: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.preview-table td:first-child {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-family: 'Courier New', monospace;
+}
+
+.preview-table input[type="number"] {
+    width: 100%;
+    padding: 0.5rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.preview-table input[type="number"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.preview-table input[type="number"].invalid {
+    border-color: var(--status-danger);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.preview-table input[type="number"].invalid:focus {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.preview-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.preview-status-badge.valid {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--status-success);
+}
+
+.preview-status-badge.invalid {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--status-danger);
+}
+
+.preview-status-badge.warning {
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--status-warning);
+}
+
+/* Scrollbar personalizada para tabela de preview */
+.preview-table::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.preview-table::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+.preview-table::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.preview-table::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}

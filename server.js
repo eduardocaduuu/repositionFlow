@@ -372,17 +372,11 @@ wss.on('close', () => {
 
 // API Routes
 
-// Criar nova tarefa (upload de planilha)
-app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
+// Preview de planilha (antes de criar tarefa)
+app.post('/api/tasks/preview', upload.single('planilha'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-    }
-
-    const { nomeAtendente, prioridade, observacoes } = req.body;
-
-    if (!nomeAtendente) {
-      return res.status(400).json({ error: 'Nome do atendente é obrigatório' });
     }
 
     // Processar planilha
@@ -394,6 +388,87 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
       return res.status(400).json({ error: result.error });
     }
 
+    // Retornar dados para preview/edição
+    // IMPORTANTE: Não remover o arquivo ainda, pois será usado na confirmação
+    res.json({
+      success: true,
+      filename: req.file.filename, // Salvar para usar depois
+      items: result.items.map(item => ({
+        sku: item.sku,
+        descricao: item.descricao,
+        total_disponivel: item.total_disponivel || 0,
+        quantidade_pegar: item.quantidade_pegar || 0, // Quantidade da planilha (pode ser editada)
+        localizacao: item.localizacao,
+        // Dados adicionais para referência
+        total_fisico: item.total_fisico,
+        total_alocado: item.total_alocado,
+        coluna: item.coluna,
+        estacao: item.estacao,
+        rack: item.rack,
+        linha_prod_alocado: item.linha_prod_alocado,
+        coluna_prod_alocado: item.coluna_prod_alocado
+      })),
+      summary: {
+        totalItems: result.totalItems,
+        uniqueSkus: result.uniqueSkus,
+        linhas: result.items.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao fazer preview da planilha:', error);
+    res.status(500).json({ error: 'Erro ao processar planilha' });
+  }
+});
+
+// Criar nova tarefa (upload de planilha)
+app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
+  try {
+    const { nomeAtendente, prioridade, observacoes, items, originalFilename } = req.body;
+
+    if (!nomeAtendente) {
+      return res.status(400).json({ error: 'Nome do atendente é obrigatório' });
+    }
+
+    let taskItems;
+    let arquivoOriginal;
+
+    // Verifica se os dados vêm do preview (já processados)
+    if (items && originalFilename) {
+      // Dados já foram processados no preview
+      taskItems = JSON.parse(items);
+      arquivoOriginal = originalFilename;
+
+      // Validar cada item
+      const invalidItems = taskItems.filter(item =>
+        item.quantidade_pegar > item.total_disponivel && item.total_disponivel > 0
+      );
+
+      if (invalidItems.length > 0) {
+        return res.status(400).json({
+          error: 'Quantidade solicitada excede o disponível em estoque',
+          invalidItems: invalidItems.map(i => i.sku)
+        });
+      }
+    } else if (req.file) {
+      // Upload direto sem preview (fluxo antigo para compatibilidade)
+      const result = processExcel(req.file.path);
+
+      if (!result.success) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: result.error });
+      }
+
+      taskItems = result.items;
+      arquivoOriginal = req.file.filename;
+    } else {
+      return res.status(400).json({ error: 'Nenhum arquivo ou dados enviados' });
+    }
+
+    // Calcular totais
+    const totalItems = taskItems.reduce((sum, item) => sum + item.quantidade_pegar, 0);
+    const uniqueSkus = taskItems.length;
+
     // Criar tarefa
     const task = {
       id: uuidv4(),
@@ -401,10 +476,10 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
       prioridade: prioridade || 'Média',
       observacoes: observacoes || '',
       status: 'PENDENTE',
-      items: result.items,
-      totalItems: result.totalItems,
-      uniqueSkus: result.uniqueSkus,
-      arquivoOriginal: req.file.filename,
+      items: taskItems,
+      totalItems,
+      uniqueSkus,
+      arquivoOriginal,
       createdAt: new Date().toISOString(),
       timeline: [{
         action: 'CRIADA',
@@ -433,9 +508,9 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
       taskId: task.id,
       message: 'Tarefa criada com sucesso',
       summary: {
-        totalItems: result.totalItems,
-        uniqueSkus: result.uniqueSkus,
-        linhas: result.items.length
+        totalItems,
+        uniqueSkus,
+        linhas: taskItems.length
       }
     });
 

@@ -415,6 +415,75 @@
         </div>
     </div>
 
+    <!-- ==========================================
+         MODAL: PREVIEW E EDIÇÃO DA PLANILHA
+         ========================================== -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content" style="max-width: 1400px; max-height: 90vh;">
+            <div class="modal-header">
+                <h2>📋 Revisar e Editar Planilha</h2>
+                <button class="modal-close" id="closePreviewModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="glass-card" style="margin-bottom: 1.5rem; padding: 1rem;">
+                    <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">
+                        ℹ️ Revise os itens abaixo e ajuste as quantidades conforme necessário.
+                    </p>
+                    <p style="color: var(--status-warning); font-size: 0.9rem; margin: 0;">
+                        ⚠️ A coluna <strong>"Qtd a Pegar"</strong> não pode exceder o <strong>"Total Disponível"</strong>
+                    </p>
+                </div>
+
+                <!-- Resumo da Planilha -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">📦</div>
+                        <div class="stat-info">
+                            <span class="stat-label">Total de SKUs</span>
+                            <span class="stat-value" id="previewTotalSkus">0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">🔢</div>
+                        <div class="stat-info">
+                            <span class="stat-label">Total de Itens</span>
+                            <span class="stat-value" id="previewTotalItems">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Itens Editável -->
+                <div style="overflow-x: auto; max-height: 50vh; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                    <table class="preview-table" id="previewTable">
+                        <thead style="position: sticky; top: 0; background: var(--bg-primary); z-index: 10;">
+                            <tr>
+                                <th style="width: 120px;">Cód. Material</th>
+                                <th style="min-width: 250px;">Descrição</th>
+                                <th style="width: 120px;">Total Disponível</th>
+                                <th style="width: 140px;">Qtd a Pegar</th>
+                                <th style="min-width: 200px;">Localização</th>
+                                <th style="width: 80px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody">
+                            <!-- Itens serão inseridos aqui via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Botões de Ação -->
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem; justify-content: flex-end;">
+                    <button class="btn btn-ghost" id="btnCancelPreview">
+                        ❌ Cancelar
+                    </button>
+                    <button class="btn btn-primary" id="btnConfirmPreview">
+                        ✅ Confirmar e Criar Tarefa
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast de Notificações -->
     <div id="toastContainer" style="position: fixed; bottom: 2rem; right: 2rem; z-index: 9999;"></div>
 

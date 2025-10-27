@@ -115,16 +115,31 @@
 
                 <!-- Filtros -->
                 <div class="glass-card" style="margin-bottom: 2rem;">
-                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
                         <select id="filterStatus" class="btn btn-secondary" style="flex: 1; min-width: 200px;">
                             <option value="">Todos os Status</option>
                             <option value="PENDENTE">🟡 Pendente</option>
                             <option value="EM_SEPARACAO">🔵 Em Separação</option>
                             <option value="CONCLUIDO">🟢 Concluído</option>
+                            <option value="CANCELADA">🔴 Cancelada</option>
                         </select>
                         <input type="text" id="filterAtendente" placeholder="Buscar por atendente..." style="flex: 2; min-width: 250px;">
                         <button id="btnRefresh" class="btn btn-primary">
                             🔄 Atualizar
+                        </button>
+                    </div>
+                    <!-- Filtros de Data -->
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 200px;">
+                            <label for="filterDataInicio" style="white-space: nowrap; color: var(--text-secondary); font-size: 0.9rem;">📅 De:</label>
+                            <input type="date" id="filterDataInicio" style="flex: 1;">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 200px;">
+                            <label for="filterDataFim" style="white-space: nowrap; color: var(--text-secondary); font-size: 0.9rem;">📅 Até:</label>
+                            <input type="date" id="filterDataFim" style="flex: 1;">
+                        </div>
+                        <button id="btnClearDates" class="btn btn-ghost" style="white-space: nowrap;">
+                            🗑️ Limpar Datas
                         </button>
                     </div>
                 </div>

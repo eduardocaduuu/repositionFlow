@@ -75,6 +75,9 @@ function setupEventListeners() {
     document.getElementById('btnRefresh')?.addEventListener('click', loadTasks);
     document.getElementById('filterStatus')?.addEventListener('change', loadTasks);
     document.getElementById('filterAtendente')?.addEventListener('input', debounce(loadTasks, 500));
+    document.getElementById('filterDataInicio')?.addEventListener('change', loadTasks);
+    document.getElementById('filterDataFim')?.addEventListener('change', loadTasks);
+    document.getElementById('btnClearDates')?.addEventListener('click', clearDateFilters);
 
     // Upload Form
     document.getElementById('uploadForm')?.addEventListener('submit', handleUploadForm);
@@ -375,10 +378,14 @@ async function loadTasks() {
     try {
         const status = document.getElementById('filterStatus')?.value || '';
         const atendente = document.getElementById('filterAtendente')?.value || '';
+        const dataInicio = document.getElementById('filterDataInicio')?.value || '';
+        const dataFim = document.getElementById('filterDataFim')?.value || '';
 
         const params = new URLSearchParams();
         if (status) params.append('status', status);
         if (atendente) params.append('atendente', atendente);
+        if (dataInicio) params.append('dataInicio', dataInicio);
+        if (dataFim) params.append('dataFim', dataFim);
 
         // Adicionar role e userName para filtrar tarefas ocultas (exceto admin)
         if (state.user && state.user.role !== 'admin') {
@@ -417,6 +424,13 @@ async function loadTasks() {
         renderTasks([]);
         updateDashboardStats([]);
     }
+}
+
+function clearDateFilters() {
+    document.getElementById('filterDataInicio').value = '';
+    document.getElementById('filterDataFim').value = '';
+    loadTasks();
+    showToast('Filtros de data limpos', 'success');
 }
 
 function updateDashboardStats(tasks) {

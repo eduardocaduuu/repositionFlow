@@ -311,6 +311,7 @@ function handleWebSocketMessage(data) {
         case 'task_resumed':
         case 'task_completed':
         case 'task_canceled':
+        case 'task_deleted':
         case 'item_updated':
             loadTasks();
             break;
@@ -708,6 +709,12 @@ function renderTaskModal(task) {
                     ❌ Cancelar Tarefa
                 </button>
             ` : ''}
+
+            ${state.user.role === 'admin' ? `
+                <button class="btn btn-danger" onclick="deleteTask('${task.id}')" style="margin-left: auto;">
+                    🗑️ Deletar Tarefa
+                </button>
+            ` : ''}
         </div>
 
         <!-- Items Table -->
@@ -1016,6 +1023,33 @@ async function cancelTask(taskId) {
     } catch (error) {
         console.error('Erro ao cancelar tarefa:', error);
         showToast('Erro ao cancelar tarefa', 'error');
+    }
+}
+
+async function deleteTask(taskId) {
+    if (!confirm('⚠️ ATENÇÃO: Deseja realmente DELETAR esta tarefa PERMANENTEMENTE?\n\nEsta ação é IRREVERSÍVEL e irá:\n- Deletar a tarefa do banco de dados\n- Deletar todos os arquivos associados\n- Remover a tarefa de todos os usuários\n\nTem certeza?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}`), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isAdmin: true })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Tarefa deletada permanentemente', 'success');
+            closeModal();
+            loadTasks();
+        } else {
+            showToast(data.error || 'Erro ao deletar tarefa', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao deletar tarefa:', error);
+        showToast('Erro ao deletar tarefa', 'error');
     }
 }
 

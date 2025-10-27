@@ -1139,6 +1139,68 @@ app.post('/api/tasks/:id/cancel', async (req, res) => {
   }
 });
 
+// Deletar tarefa fisicamente (exclusivo do administrador)
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const { isAdmin } = req.body;
+    const task = await database.getTaskById(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    // Apenas administradores podem deletar tarefas
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores podem deletar tarefas' });
+    }
+
+    // Deletar arquivos associados se existirem
+    if (task.arquivoOriginal) {
+      const filePath = path.join(uploadDir, task.arquivoOriginal);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`Arquivo deletado: ${task.arquivoOriginal}`);
+        } catch (error) {
+          console.error('Erro ao deletar arquivo:', error);
+        }
+      }
+    }
+
+    // Deletar planilha de conclusão se existir
+    if (task.planilhaConclusao && task.planilhaConclusao.arquivo) {
+      const filePath = path.join(uploadDir, task.planilhaConclusao.arquivo);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`Planilha de conclusão deletada: ${task.planilhaConclusao.arquivo}`);
+        } catch (error) {
+          console.error('Erro ao deletar planilha de conclusão:', error);
+        }
+      }
+    }
+
+    // Deletar tarefa do banco de dados
+    await database.deleteTask(req.params.id);
+
+    // Notificar todos os clientes
+    broadcast({
+      type: 'task_deleted',
+      taskId: task.id
+    });
+
+    console.log(`Tarefa ${task.id} deletada por administrador`);
+
+    res.json({
+      success: true,
+      message: 'Tarefa deletada com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao deletar tarefa:', error);
+    res.status(500).json({ error: 'Erro ao deletar tarefa' });
+  }
+});
+
 // Autenticação de admin
 app.post('/api/auth/admin', (req, res) => {
   const { username, password } = req.body;

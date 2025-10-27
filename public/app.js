@@ -1099,15 +1099,22 @@ async function handleUploadForm(e) {
         // Mostrar loading
         showToast('Processando planilha...', 'info');
 
+        console.log('📤 Enviando planilha para preview...');
+
         // Chamar endpoint de preview
         const response = await fetch(apiUrl('/api/tasks/preview'), {
             method: 'POST',
             body: formData
         });
 
+        console.log('📥 Resposta recebida. Status:', response.status);
+
         const data = await response.json();
+        console.log('📊 Dados recebidos:', data);
 
         if (data.success) {
+            console.log('✅ Sucesso! Items:', data.items?.length);
+
             // Salvar dados temporários para usar ao confirmar
             state.tempTaskData = {
                 nomeAtendente,
@@ -1126,14 +1133,17 @@ async function handleUploadForm(e) {
             const roleEmoji = { 'atendente': '👤', 'separador': '📋', 'admin': '👑' };
             document.getElementById('userDisplay').textContent = `${roleEmoji[state.user.role]} ${state.user.name}`;
 
+            console.log('🔍 Chamando showPreviewModal...');
             // Mostrar modal de preview
             showPreviewModal(data);
+            console.log('✅ Modal deveria estar aberto agora');
         } else {
+            console.error('❌ Erro do backend:', data.error);
             showToast(data.error, 'error');
         }
     } catch (error) {
-        console.error('Erro ao processar planilha:', error);
-        showToast('Erro ao processar planilha', 'error');
+        console.error('❌ Erro ao processar planilha:', error);
+        showToast('Erro ao processar planilha: ' + error.message, 'error');
     }
 }
 
@@ -1142,10 +1152,25 @@ async function handleUploadForm(e) {
 // ==========================================
 
 function showPreviewModal(data) {
+    console.log('🎬 showPreviewModal iniciada. Data:', data);
+
     const modal = document.getElementById('previewModal');
     const tbody = document.getElementById('previewTableBody');
     const totalSkusEl = document.getElementById('previewTotalSkus');
     const totalItemsEl = document.getElementById('previewTotalItems');
+
+    console.log('🔍 Elementos encontrados:', {
+        modal: !!modal,
+        tbody: !!tbody,
+        totalSkusEl: !!totalSkusEl,
+        totalItemsEl: !!totalItemsEl
+    });
+
+    if (!modal || !tbody || !totalSkusEl || !totalItemsEl) {
+        console.error('❌ Elementos do modal não encontrados!');
+        showToast('Erro: elementos do modal não encontrados', 'error');
+        return;
+    }
 
     // Atualizar resumo
     totalSkusEl.textContent = data.summary.uniqueSkus;
@@ -1154,8 +1179,11 @@ function showPreviewModal(data) {
     const totalItems = data.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
     totalItemsEl.textContent = totalItems;
 
+    console.log('📊 Resumo atualizado. Total SKUs:', data.summary.uniqueSkus, 'Total Items:', totalItems);
+
     // Limpar tabela
     tbody.innerHTML = '';
+    console.log('🗑️ Tabela limpa');
 
     // Preencher tabela
     data.items.forEach((item, index) => {
@@ -1199,18 +1227,30 @@ function showPreviewModal(data) {
         tbody.appendChild(tr);
     });
 
+    console.log('✅ Tabela preenchida com', data.items.length, 'itens');
+
     // Adicionar event listeners para inputs
     document.querySelectorAll('.preview-qty-input').forEach(input => {
         input.addEventListener('input', handleQuantityChange);
     });
+
+    console.log('🔗 Event listeners adicionados');
 
     // Event listeners para botões
     document.getElementById('btnCancelPreview').onclick = closePreviewModal;
     document.getElementById('closePreviewModal').onclick = closePreviewModal;
     document.getElementById('btnConfirmPreview').onclick = confirmAndCreateTask;
 
+    console.log('🎯 Botões configurados');
+
+    // Chamar updateConfirmButtonState para estado inicial
+    updateConfirmButtonState();
+
+    console.log('🚪 Exibindo modal...');
     // Mostrar modal
     showElement('previewModal');
+
+    console.log('✅ showPreviewModal concluída. Modal class:', modal.className);
 }
 
 function handleQuantityChange(e) {

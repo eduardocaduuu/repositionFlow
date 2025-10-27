@@ -1119,13 +1119,22 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
     // Gerar buffer do Excel
     const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-    // Nome do arquivo
-    const fileName = `tarefa_${task.id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    // Nome do arquivo com timestamp para evitar cache
+    const timestamp = Date.now();
+    const fileName = `tarefa_${task.id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}_${timestamp}.xlsx`;
 
-    // Enviar arquivo
+    console.log('📊 [EXCEL EXPORT] Enviando arquivo:', fileName);
+
+    // Enviar arquivo COM HEADERS ANTI-CACHE
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    // FORÇAR SEM CACHE
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.send(excelBuffer);
+
+    console.log('✅ [EXCEL EXPORT] Arquivo enviado com sucesso - 4 colunas');
 
   } catch (error) {
     console.error('Erro ao exportar tarefa para Excel:', error);

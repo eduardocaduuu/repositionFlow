@@ -1001,8 +1001,14 @@ async function markItem(taskId, sku, status) {
 
 async function exportTaskToExcel(taskId) {
     try {
+        // Adicionar timestamp para evitar cache do navegador/CDN
+        const timestamp = Date.now();
+        const url = apiUrl(`/api/tasks/${taskId}/export-excel?t=${timestamp}`);
+
+        console.log('📥 Baixando Excel (sem cache):', url);
+
         // Usar URL completa do backend (Koyeb) para exportação
-        window.location.href = apiUrl(`/api/tasks/${taskId}/export-excel`);
+        window.location.href = url;
         showToast('Download iniciado!', 'success');
     } catch (error) {
         console.error('Erro ao exportar:', error);

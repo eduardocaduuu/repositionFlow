@@ -1222,6 +1222,18 @@ function showPreviewModal(data) {
                     ${needsInput ? '✏️' : (isValid ? '✓' : '⚠️')}
                 </span>
             </td>
+            <td style="text-align: center;">
+                <button
+                    class="btn-remove-item"
+                    data-index="${index}"
+                    title="Remover este item"
+                    style="background: transparent; border: none; color: var(--status-danger); cursor: pointer; font-size: 1.2rem; padding: 0.25rem; transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.2)'"
+                    onmouseout="this.style.transform='scale(1)'"
+                >
+                    🗑️
+                </button>
+            </td>
         `;
 
         tbody.appendChild(tr);
@@ -1232,6 +1244,11 @@ function showPreviewModal(data) {
     // Adicionar event listeners para inputs
     document.querySelectorAll('.preview-qty-input').forEach(input => {
         input.addEventListener('input', handleQuantityChange);
+    });
+
+    // Adicionar event listeners para botões de remover
+    document.querySelectorAll('.btn-remove-item').forEach(btn => {
+        btn.addEventListener('click', handleRemoveItem);
     });
 
     console.log('🔗 Event listeners adicionados');
@@ -1298,9 +1315,105 @@ function handleQuantityChange(e) {
     updateConfirmButtonState();
 }
 
+function handleRemoveItem(e) {
+    const btn = e.target.closest('.btn-remove-item');
+    const index = parseInt(btn.dataset.index);
+    const item = state.tempTaskData.items[index];
+
+    // Confirmar remoção
+    if (!confirm(`Deseja remover o item "${item.sku} - ${item.descricao}" da lista?`)) {
+        return;
+    }
+
+    console.log('🗑️ Removendo item:', item.sku);
+
+    // Remover item do array
+    state.tempTaskData.items.splice(index, 1);
+
+    // Re-renderizar a tabela completa
+    const tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = '';
+
+    // Recriar todas as linhas com novos índices
+    state.tempTaskData.items.forEach((item, newIndex) => {
+        const tr = document.createElement('tr');
+        tr.dataset.index = newIndex;
+
+        const isValid = item.quantidade_pegar <= item.total_disponivel || item.total_disponivel === 0;
+        const needsInput = item.quantidade_pegar === 0;
+
+        if (!isValid) {
+            tr.classList.add('invalid-row');
+        }
+
+        tr.innerHTML = `
+            <td>${item.sku}</td>
+            <td title="${item.descricao}">${item.descricao}</td>
+            <td style="text-align: center; font-weight: 600; color: ${item.total_disponivel > 0 ? 'var(--status-success)' : 'var(--status-warning)'};">
+                ${item.total_disponivel || 'N/A'}
+            </td>
+            <td>
+                <input
+                    type="number"
+                    class="preview-qty-input ${!isValid ? 'invalid' : ''} ${needsInput ? 'needs-input' : ''}"
+                    data-index="${newIndex}"
+                    data-max="${item.total_disponivel}"
+                    value="${item.quantidade_pegar}"
+                    min="0"
+                    step="1"
+                    placeholder="Digite a quantidade"
+                    required
+                />
+            </td>
+            <td style="font-size: 0.85rem;">${item.localizacao}</td>
+            <td style="text-align: center;">
+                <span class="preview-status-badge ${needsInput ? 'warning' : (isValid ? 'valid' : 'invalid')}">
+                    ${needsInput ? '✏️' : (isValid ? '✓' : '⚠️')}
+                </span>
+            </td>
+            <td style="text-align: center;">
+                <button
+                    class="btn-remove-item"
+                    data-index="${newIndex}"
+                    title="Remover este item"
+                    style="background: transparent; border: none; color: var(--status-danger); cursor: pointer; font-size: 1.2rem; padding: 0.25rem; transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.2)'"
+                    onmouseout="this.style.transform='scale(1)'"
+                >
+                    🗑️
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    // Re-adicionar event listeners
+    document.querySelectorAll('.preview-qty-input').forEach(input => {
+        input.addEventListener('input', handleQuantityChange);
+    });
+
+    document.querySelectorAll('.btn-remove-item').forEach(btn => {
+        btn.addEventListener('click', handleRemoveItem);
+    });
+
+    // Atualizar totais
+    updatePreviewTotals();
+    updatePreviewSkuCount();
+
+    // Atualizar estado do botão
+    updateConfirmButtonState();
+
+    showToast('Item removido com sucesso', 'success');
+}
+
 function updatePreviewTotals() {
     const totalItems = state.tempTaskData.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
     document.getElementById('previewTotalItems').textContent = totalItems;
+}
+
+function updatePreviewSkuCount() {
+    document.getElementById('previewTotalSkus').textContent = state.tempTaskData.items.length;
 }
 
 function updateConfirmButtonState() {

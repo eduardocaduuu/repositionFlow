@@ -1041,7 +1041,7 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
     // Criar workbook
     const workbook = xlsx.utils.book_new();
 
-    // Preparar dados para a planilha
+    // Preparar dados para a planilha - FORMATO SIMPLIFICADO
     const worksheetData = [
       // Informações da tarefa
       ['INFORMAÇÕES DA TAREFA'],
@@ -1051,29 +1051,25 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
       ['Status', task.status],
       ['Criado em', new Date(task.createdAt).toLocaleString('pt-BR')],
       [''],
-      // Headers dos itens
-      ['SKU', 'Descrição', 'Qtd Pegar', 'Localização', 'Estoque Disponível', 'Total Físico', 'Total Alocado', 'Status Separação', 'Observação']
+      // Headers dos itens - APENAS 4 COLUNAS ESSENCIAIS
+      ['SKU', 'Descrição', 'Localização', 'Qtd a Pegar']
     ];
 
-    // Adicionar itens
+    // Adicionar itens - APENAS 4 COLUNAS
     task.items.forEach(item => {
       worksheetData.push([
         item.sku,
         item.descricao,
-        item.quantidade_pegar,
         item.localizacao,
-        item.total_disponivel || '',
-        item.total_fisico || '',
-        item.total_alocado || '',
-        item.status_separacao || '-',
-        item.observacao_separacao || ''
+        item.quantidade_pegar
       ]);
     });
 
     // Adicionar totais
     const totalPegar = task.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
     worksheetData.push([]);
-    worksheetData.push(['TOTAL DE ITENS', task.items.length, totalPegar]);
+    worksheetData.push(['TOTAL', '', '', totalPegar]);
+    worksheetData.push(['Total de SKUs', task.items.length]);
 
     // Se tiver informações de separação
     if (task.nomeSeparador) {
@@ -1105,17 +1101,12 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
     // Criar worksheet
     const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
 
-    // Definir largura das colunas
+    // Definir largura das colunas - APENAS 4 COLUNAS
     worksheet['!cols'] = [
       { wch: 15 },  // SKU
-      { wch: 40 },  // Descrição
-      { wch: 12 },  // Qtd Pegar
-      { wch: 30 },  // Localização
-      { wch: 15 },  // Estoque Disponível
-      { wch: 15 },  // Total Físico
-      { wch: 15 },  // Total Alocado
-      { wch: 15 },  // Status Separação
-      { wch: 30 }   // Observação
+      { wch: 50 },  // Descrição
+      { wch: 35 },  // Localização
+      { wch: 15 }   // Qtd a Pegar
     ];
 
     // Adicionar worksheet ao workbook

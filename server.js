@@ -1043,21 +1043,14 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
     // Criar workbook
     const workbook = xlsx.utils.book_new();
 
-    // Preparar dados para a planilha - FORMATO SIMPLIFICADO
+    // Preparar dados para a planilha - FORMATO ULTRA SIMPLIFICADO
+    // APENAS A TABELA DE ITENS - SEM INFORMAÇÕES EXTRAS
     const worksheetData = [
-      // Informações da tarefa
-      ['INFORMAÇÕES DA TAREFA'],
-      ['ID da Tarefa', task.id],
-      ['Atendente', task.nomeAtendente],
-      ['Prioridade', task.prioridade],
-      ['Status', task.status],
-      ['Criado em', new Date(task.createdAt).toLocaleString('pt-BR')],
-      [''],
-      // Headers dos itens - APENAS 4 COLUNAS ESSENCIAIS
+      // Headers dos itens - APENAS 4 COLUNAS
       ['SKU', 'Descrição', 'Localização', 'Qtd a Pegar']
     ];
 
-    console.log('📊 [EXCEL EXPORT] Headers configurados: 4 colunas (SKU, Descrição, Localização, Qtd)');
+    console.log('📊 [EXCEL EXPORT] Formato ultra simplificado - APENAS tabela de itens');
 
     // Adicionar itens - APENAS 4 COLUNAS
     task.items.forEach(item => {
@@ -1068,39 +1061,6 @@ app.get('/api/tasks/:id/export-excel', async (req, res) => {
         item.quantidade_pegar
       ]);
     });
-
-    // Adicionar totais
-    const totalPegar = task.items.reduce((sum, item) => sum + item.quantidade_pegar, 0);
-    worksheetData.push([]);
-    worksheetData.push(['TOTAL', '', '', totalPegar]);
-    worksheetData.push(['Total de SKUs', task.items.length]);
-
-    // Se tiver informações de separação
-    if (task.nomeSeparador) {
-      worksheetData.push([]);
-      worksheetData.push(['INFORMAÇÕES DE SEPARAÇÃO']);
-      worksheetData.push(['Separador', task.nomeSeparador]);
-
-      if (task.startTime) {
-        worksheetData.push(['Iniciado em', new Date(task.startTime).toLocaleString('pt-BR')]);
-      }
-
-      if (task.endTime) {
-        worksheetData.push(['Concluído em', new Date(task.endTime).toLocaleString('pt-BR')]);
-        worksheetData.push(['Duração', task.durationFormatted || '-']);
-      }
-
-      // Estatísticas de separação
-      const itensOK = task.items.filter(i => i.status_separacao === 'OK').length;
-      const itensFaltando = task.items.filter(i => i.status_separacao === 'FALTANDO').length;
-      const itensPendentes = task.items.length - itensOK - itensFaltando;
-
-      worksheetData.push([]);
-      worksheetData.push(['ESTATÍSTICAS']);
-      worksheetData.push(['Itens OK', itensOK]);
-      worksheetData.push(['Itens Faltando', itensFaltando]);
-      worksheetData.push(['Itens Pendentes', itensPendentes]);
-    }
 
     // Criar worksheet
     const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);

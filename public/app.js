@@ -307,6 +307,7 @@ function handleWebSocketMessage(data) {
         case 'task_paused':
         case 'task_resumed':
         case 'task_completed':
+        case 'task_canceled':
         case 'item_updated':
             loadTasks();
             break;
@@ -379,6 +380,17 @@ async function loadTasks() {
         if (status) params.append('status', status);
         if (atendente) params.append('atendente', atendente);
 
+        // Adicionar role e userName para filtrar tarefas ocultas (exceto admin)
+        if (state.user && state.user.role !== 'admin') {
+            params.append('role', state.user.role);
+            if (state.user.name) {
+                params.append('userName', state.user.name);
+            } else if (state.user.role === 'atendente' || state.user.role === 'separador') {
+                // Se não tem nome ainda, usar role como identificador temporário
+                params.append('userName', state.user.role);
+            }
+        }
+
         const response = await fetch(apiUrl(`/api/tasks?${params}`));
 
         if (!response.ok) {
@@ -444,13 +456,15 @@ function createTaskCard(task) {
     const statusColors = {
         'PENDENTE': 'warning',
         'EM_SEPARACAO': 'info',
-        'CONCLUIDO': 'success'
+        'CONCLUIDO': 'success',
+        'CANCELADA': 'danger'
     };
 
     const statusLabels = {
         'PENDENTE': '🟡 Pendente',
         'EM_SEPARACAO': '🔵 Em Separação',
-        'CONCLUIDO': '🟢 Concluído'
+        'CONCLUIDO': '🟢 Concluído',
+        'CANCELADA': '🔴 Cancelada'
     };
 
     const prioridadeColors = {
@@ -523,6 +537,21 @@ function createTaskCard(task) {
                     </span>
                 </div>
                 ` : ''}
+                ${task.status === 'CANCELADA' && task.canceledAt ? `
+                <div style="font-size: 0.85rem;">
+                    <span style="color: var(--text-secondary);">❌ Cancelada:</span>
+                    <span style="color: #ff6b6b; font-weight: 500; margin-left: 0.25rem;">
+                        ${new Date(task.canceledAt).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                        ${task.canceledBy ? ` por ${task.canceledBy}` : ''}
+                    </span>
+                </div>
+                ` : ''}
             </div>
         </div>
     `;
@@ -577,6 +606,15 @@ function renderTaskModal(task) {
                 <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); border-left: 4px solid var(--accent-green);">
                     <strong style="color: var(--accent-green);">📝 Observações do Atendente:</strong>
                     <p style="margin-top: 0.5rem; color: var(--text-primary); line-height: 1.5;">${task.observacoes}</p>
+                </div>
+            ` : ''}
+            ${task.status === 'CANCELADA' ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: rgba(255, 107, 107, 0.1); border-radius: var(--radius-md); border-left: 4px solid #ff6b6b;">
+                    <strong style="color: #ff6b6b;">❌ Tarefa Cancelada</strong>
+                    <p style="margin-top: 0.5rem; color: var(--text-secondary); line-height: 1.5;">
+                        ${task.canceledBy ? `Cancelada por: ${task.canceledBy}` : 'Tarefa cancelada'}
+                        ${task.canceledAt ? ` em ${new Date(task.canceledAt).toLocaleString('pt-BR')}` : ''}
+                    </p>
                 </div>
             ` : ''}
             ${task.status === 'EM_SEPARACAO' ? `
@@ -639,11 +677,23 @@ function renderTaskModal(task) {
             ` : ''}
         ` : ''}
 
-        <!-- Export Button -->
-        <div style="margin-bottom: 2rem;">
+        <!-- Export and Action Buttons -->
+        <div style="margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
             <button class="btn btn-secondary" onclick="exportTaskToExcel('${task.id}')">
                 📥 Exportar para Excel
             </button>
+
+            ${(state.user.role === 'separador' || state.user.role === 'atendente') && task.status !== 'CANCELADA' ? `
+                <button class="btn btn-secondary" onclick="hideTask('${task.id}')">
+                    👁️ Ocultar Tarefa
+                </button>
+            ` : ''}
+
+            ${state.user.role === 'atendente' && task.nomeAtendente === state.user.name && task.status !== 'CONCLUIDO' && task.status !== 'CANCELADA' ? `
+                <button class="btn btn-danger" onclick="cancelTask('${task.id}')">
+                    ❌ Cancelar Tarefa
+                </button>
+            ` : ''}
         </div>
 
         <!-- Items Table -->
@@ -887,6 +937,70 @@ async function exportTaskToExcel(taskId) {
     } catch (error) {
         console.error('Erro ao exportar:', error);
         showToast('Erro ao exportar', 'error');
+    }
+}
+
+async function hideTask(taskId) {
+    if (!confirm('Deseja ocultar esta tarefa do seu dashboard? A tarefa não será deletada, apenas ficará oculta para você.')) {
+        return;
+    }
+
+    try {
+        const userName = state.user.name || state.user.role;
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/hide`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                role: state.user.role,
+                userName: userName
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Tarefa ocultada do seu dashboard', 'success');
+            closeModal();
+            loadTasks();
+        } else {
+            showToast(data.error || 'Erro ao ocultar tarefa', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao ocultar tarefa:', error);
+        showToast('Erro ao ocultar tarefa', 'error');
+    }
+}
+
+async function cancelTask(taskId) {
+    if (!confirm('Deseja realmente CANCELAR esta tarefa? Esta ação marcará a tarefa como cancelada para todos os usuários.')) {
+        return;
+    }
+
+    try {
+        const nomeAtendente = state.user.name;
+        if (!nomeAtendente) {
+            showToast('Nome do atendente não encontrado', 'error');
+            return;
+        }
+
+        const response = await fetch(apiUrl(`/api/tasks/${taskId}/cancel`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomeAtendente })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Tarefa cancelada com sucesso', 'success');
+            closeModal();
+            loadTasks();
+        } else {
+            showToast(data.error || 'Erro ao cancelar tarefa', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao cancelar tarefa:', error);
+        showToast('Erro ao cancelar tarefa', 'error');
     }
 }
 

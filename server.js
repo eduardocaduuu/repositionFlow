@@ -859,7 +859,7 @@ app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), async (r
       detalhes: `Planilha de conclusão enviada: ${resultConclusao.totalLinhas} linhas, ${resultConclusao.totalQuantidade} itens`
     });
 
-    await database.updateTask(req.params.id, {
+    const updatedTask = await database.updateTask(req.params.id, {
       status: 'CONCLUIDO',
       endTime: now,
       activeTime,
@@ -878,6 +878,12 @@ app.post('/api/tasks/:id/complete', upload.single('planilhaConclusao'), async (r
     broadcast({
       type: 'task_completed',
       taskId: task.id,
+      task: {
+        id: task.id,
+        nomeAtendente: task.nomeAtendente,
+        nomeSeparador: task.nomeSeparador,
+        totalItems: task.totalItems
+      },
       endTime: now,
       duration: durationFormatted,
       activeTime

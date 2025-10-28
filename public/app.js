@@ -1203,8 +1203,13 @@ function showPreviewModal(data) {
         const tr = document.createElement('tr');
         tr.dataset.index = index;
 
-        const isValid = item.quantidade_pegar <= item.total_disponivel || item.total_disponivel === 0;
-        const needsInput = item.quantidade_pegar === 0; // Destacar campos que precisam ser preenchidos
+        // CORREÇÃO: Se estoque = 0, quantidade DEVE ser 0. Se estoque > 0, quantidade <= estoque
+        const isValid = item.total_disponivel === 0
+            ? item.quantidade_pegar === 0  // Se não tem estoque, quantidade deve ser 0
+            : item.quantidade_pegar <= item.total_disponivel && item.quantidade_pegar >= 0; // Se tem estoque, validar limite
+
+        const needsInput = item.quantidade_pegar === 0 && item.total_disponivel > 0; // Só destacar se tem estoque mas não preencheu
+        const isOutOfStock = item.total_disponivel === 0; // Item sem estoque
 
         if (!isValid) {
             tr.classList.add('invalid-row');
@@ -1214,7 +1219,7 @@ function showPreviewModal(data) {
             <td>${item.sku}</td>
             <td title="${item.descricao}">${item.descricao}</td>
             <td style="text-align: center; font-weight: 600; color: ${item.total_disponivel > 0 ? 'var(--status-success)' : 'var(--status-warning)'};">
-                ${item.total_disponivel || 'N/A'}
+                ${item.total_disponivel || '0'}
             </td>
             <td>
                 <input
@@ -1224,15 +1229,16 @@ function showPreviewModal(data) {
                     data-max="${item.total_disponivel}"
                     value="${item.quantidade_pegar}"
                     min="0"
+                    max="${item.total_disponivel || 0}"
                     step="1"
-                    placeholder="Digite a quantidade"
-                    required
+                    placeholder="${isOutOfStock ? 'SEM ESTOQUE' : 'Digite a quantidade'}"
+                    ${isOutOfStock ? 'disabled readonly title="Item sem estoque disponível"' : 'required'}
                 />
             </td>
             <td style="font-size: 0.85rem;">${item.localizacao}</td>
             <td style="text-align: center;">
-                <span class="preview-status-badge ${needsInput ? 'warning' : (isValid ? 'valid' : 'invalid')}">
-                    ${needsInput ? '✏️' : (isValid ? '✓' : '⚠️')}
+                <span class="preview-status-badge ${isOutOfStock ? 'out-of-stock' : (needsInput ? 'warning' : (isValid ? 'valid' : 'invalid'))}">
+                    ${isOutOfStock ? '🚫' : (needsInput ? '✏️' : (isValid ? '✓' : '⚠️'))}
                 </span>
             </td>
             <td style="text-align: center;">
@@ -1293,9 +1299,13 @@ function handleQuantityChange(e) {
     // Atualizar valor no state temporário
     state.tempTaskData.items[index].quantidade_pegar = value;
 
-    // Validar
-    const isValid = value <= maxAvailable || maxAvailable === 0;
-    const needsInput = value === 0;
+    // CORREÇÃO: Validar corretamente - Se estoque = 0, não pode pegar nada
+    const isValid = maxAvailable === 0
+        ? value === 0  // Se não tem estoque, quantidade DEVE ser 0
+        : value <= maxAvailable && value >= 0; // Se tem estoque, validar limite
+
+    const needsInput = value === 0 && maxAvailable > 0; // Só destacar se tem estoque mas não preencheu
+    const isOutOfStock = maxAvailable === 0;
 
     // Atualizar classes de validação
     input.classList.remove('invalid', 'needs-input');
@@ -1310,7 +1320,10 @@ function handleQuantityChange(e) {
 
     // Atualizar badge de status
     const badge = row.querySelector('.preview-status-badge');
-    if (needsInput) {
+    if (isOutOfStock) {
+        badge.className = 'preview-status-badge out-of-stock';
+        badge.textContent = '🚫';
+    } else if (needsInput) {
         badge.className = 'preview-status-badge warning';
         badge.textContent = '✏️';
     } else if (isValid) {
@@ -1352,8 +1365,13 @@ function handleRemoveItem(e) {
         const tr = document.createElement('tr');
         tr.dataset.index = newIndex;
 
-        const isValid = item.quantidade_pegar <= item.total_disponivel || item.total_disponivel === 0;
-        const needsInput = item.quantidade_pegar === 0;
+        // CORREÇÃO: Se estoque = 0, quantidade DEVE ser 0. Se estoque > 0, quantidade <= estoque
+        const isValid = item.total_disponivel === 0
+            ? item.quantidade_pegar === 0  // Se não tem estoque, quantidade deve ser 0
+            : item.quantidade_pegar <= item.total_disponivel && item.quantidade_pegar >= 0; // Se tem estoque, validar limite
+
+        const needsInput = item.quantidade_pegar === 0 && item.total_disponivel > 0; // Só destacar se tem estoque mas não preencheu
+        const isOutOfStock = item.total_disponivel === 0; // Item sem estoque
 
         if (!isValid) {
             tr.classList.add('invalid-row');
@@ -1363,7 +1381,7 @@ function handleRemoveItem(e) {
             <td>${item.sku}</td>
             <td title="${item.descricao}">${item.descricao}</td>
             <td style="text-align: center; font-weight: 600; color: ${item.total_disponivel > 0 ? 'var(--status-success)' : 'var(--status-warning)'};">
-                ${item.total_disponivel || 'N/A'}
+                ${item.total_disponivel || '0'}
             </td>
             <td>
                 <input
@@ -1373,15 +1391,16 @@ function handleRemoveItem(e) {
                     data-max="${item.total_disponivel}"
                     value="${item.quantidade_pegar}"
                     min="0"
+                    max="${item.total_disponivel || 0}"
                     step="1"
-                    placeholder="Digite a quantidade"
-                    required
+                    placeholder="${isOutOfStock ? 'SEM ESTOQUE' : 'Digite a quantidade'}"
+                    ${isOutOfStock ? 'disabled readonly title="Item sem estoque disponível"' : 'required'}
                 />
             </td>
             <td style="font-size: 0.85rem;">${item.localizacao}</td>
             <td style="text-align: center;">
-                <span class="preview-status-badge ${needsInput ? 'warning' : (isValid ? 'valid' : 'invalid')}">
-                    ${needsInput ? '✏️' : (isValid ? '✓' : '⚠️')}
+                <span class="preview-status-badge ${isOutOfStock ? 'out-of-stock' : (needsInput ? 'warning' : (isValid ? 'valid' : 'invalid'))}">
+                    ${isOutOfStock ? '🚫' : (needsInput ? '✏️' : (isValid ? '✓' : '⚠️'))}
                 </span>
             </td>
             <td style="text-align: center;">
@@ -1432,10 +1451,18 @@ function updatePreviewSkuCount() {
 function updateConfirmButtonState() {
     const btnConfirm = document.getElementById('btnConfirmPreview');
 
-    // Verificar se há itens com quantidade inválida (maior que disponível)
+    // CORREÇÃO: Verificar se há itens com quantidade inválida
     const hasInvalidItems = state.tempTaskData.items.some(item => {
         const max = item.total_disponivel;
-        return item.quantidade_pegar > max && max > 0;
+        const qty = item.quantidade_pegar;
+
+        // Se estoque = 0 e tentou pegar algo, é inválido
+        if (max === 0 && qty > 0) return true;
+
+        // Se estoque > 0 e quantidade > disponível, é inválido
+        if (max > 0 && qty > max) return true;
+
+        return false;
     });
 
     // Verificar se há pelo menos um item com quantidade > 0
@@ -1446,12 +1473,12 @@ function updateConfirmButtonState() {
         btnConfirm.disabled = true;
         btnConfirm.style.opacity = '0.5';
         btnConfirm.style.cursor = 'not-allowed';
-        btnConfirm.title = 'Corrija os itens com quantidade inválida antes de confirmar';
+        btnConfirm.title = 'Corrija os itens com quantidade inválida (não é possível pegar itens sem estoque)';
     } else if (!hasAtLeastOneItem) {
         btnConfirm.disabled = true;
         btnConfirm.style.opacity = '0.5';
         btnConfirm.style.cursor = 'not-allowed';
-        btnConfirm.title = 'Preencha a quantidade de pelo menos um item';
+        btnConfirm.title = 'Preencha a quantidade de pelo menos um item com estoque disponível';
     } else {
         btnConfirm.disabled = false;
         btnConfirm.style.opacity = '1';
@@ -1470,22 +1497,30 @@ function closePreviewModal() {
 async function confirmAndCreateTask() {
     const btnConfirm = document.getElementById('btnConfirmPreview');
 
-    // Verificar se há itens inválidos
+    // CORREÇÃO: Verificar se há itens inválidos
     const hasInvalidItems = state.tempTaskData.items.some(item => {
         const max = item.total_disponivel;
-        return item.quantidade_pegar > max && max > 0;
+        const qty = item.quantidade_pegar;
+
+        // Se estoque = 0 e tentou pegar algo, é inválido
+        if (max === 0 && qty > 0) return true;
+
+        // Se estoque > 0 e quantidade > disponível, é inválido
+        if (max > 0 && qty > max) return true;
+
+        return false;
     });
 
     // Verificar se há pelo menos um item com quantidade > 0
     const hasAtLeastOneItem = state.tempTaskData.items.some(item => item.quantidade_pegar > 0);
 
     if (hasInvalidItems) {
-        showToast('Corrija os itens com quantidade inválida antes de confirmar', 'error');
+        showToast('Não é possível requisitar itens sem estoque disponível', 'error');
         return;
     }
 
     if (!hasAtLeastOneItem) {
-        showToast('Preencha a quantidade de pelo menos um item', 'error');
+        showToast('Preencha a quantidade de pelo menos um item com estoque disponível', 'error');
         return;
     }
 

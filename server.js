@@ -479,15 +479,39 @@ app.post('/api/tasks', upload.single('planilha'), async (req, res) => {
       taskItems = JSON.parse(items);
       arquivoOriginal = originalFilename;
 
-      // Validar cada item
-      const invalidItems = taskItems.filter(item =>
-        item.quantidade_pegar > item.total_disponivel && item.total_disponivel > 0
-      );
+      // CORREÇÃO: Validar cada item rigorosamente
+      const invalidItems = taskItems.filter(item => {
+        const qty = item.quantidade_pegar;
+        const disponivel = item.total_disponivel || 0;
+
+        // Se estoque = 0, não pode pegar nada
+        if (disponivel === 0 && qty > 0) {
+          return true;
+        }
+
+        // Se estoque > 0, quantidade não pode exceder disponível
+        if (disponivel > 0 && qty > disponivel) {
+          return true;
+        }
+
+        // Quantidade não pode ser negativa
+        if (qty < 0) {
+          return true;
+        }
+
+        return false;
+      });
 
       if (invalidItems.length > 0) {
         return res.status(400).json({
-          error: 'Quantidade solicitada excede o disponível em estoque',
-          invalidItems: invalidItems.map(i => i.sku)
+          error: 'Não é possível requisitar itens sem estoque ou com quantidade maior que o disponível',
+          invalidItems: invalidItems.map(i => ({
+            sku: i.sku,
+            descricao: i.descricao,
+            solicitado: i.quantidade_pegar,
+            disponivel: i.total_disponivel || 0,
+            motivo: i.total_disponivel === 0 ? 'Item sem estoque' : 'Quantidade excede disponível'
+          }))
         });
       }
     } else if (req.file) {

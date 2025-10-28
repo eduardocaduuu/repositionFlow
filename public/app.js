@@ -1913,24 +1913,39 @@ function debounce(func, wait) {
 }
 
 function playNotificationSound() {
-    // Create a simple beep sound
+    // Criar um alarme sonoro mais audível e chamativo (3 bipes)
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        // Função auxiliar para criar um bipe
+        const createBeep = (startTime, frequency, duration) => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
 
-        oscillator.frequency.value = 800;
-        oscillator.type = 'sine';
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
 
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine';
 
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
+            // Envelope: fade in rápido, sustain, fade out
+            gainNode.gain.setValueAtTime(0, startTime);
+            gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.05);
+            gainNode.gain.linearRampToValueAtTime(0.4, startTime + duration - 0.05);
+            gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+
+            oscillator.start(startTime);
+            oscillator.stop(startTime + duration);
+        };
+
+        // Tocar 3 bipes em sequência (som de notificação mais chamativo)
+        const now = audioContext.currentTime;
+        createBeep(now, 880, 0.15);        // Primeiro bipe (A5)
+        createBeep(now + 0.2, 1046, 0.15); // Segundo bipe (C6)
+        createBeep(now + 0.4, 1318, 0.25); // Terceiro bipe mais longo (E6)
+
+        console.log('🔔 Alarme sonoro tocado - Nova tarefa disponível!');
     } catch (error) {
-        console.log('Não foi possível reproduzir som de notificação');
+        console.log('❌ Não foi possível reproduzir som de notificação:', error);
     }
 }

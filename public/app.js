@@ -371,10 +371,17 @@ function handleWebSocketMessage(data) {
             loadTasks();
             break;
 
+        case 'task_completed':
+            if (state.user.role === 'atendente') {
+                showToast(`Tarefa concluída! ${data.task.totalItems} itens separados`, 'success');
+                playNotificationSound();
+            }
+            loadTasks();
+            break;
+
         case 'task_started':
         case 'task_paused':
         case 'task_resumed':
-        case 'task_completed':
         case 'task_canceled':
         case 'task_deleted':
         case 'item_updated':

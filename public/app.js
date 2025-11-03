@@ -759,7 +759,7 @@ function renderTaskModal(task) {
                 📥 Exportar para Excel
             </button>
 
-            ${state.user.role === 'atendente' && task.nomeAtendente === state.user.name && task.status !== 'CONCLUIDO' && task.status !== 'CANCELADA' ? `
+            ${state.user.role === 'atendente' && (task.nomeAtendente === state.user.name || task.status === 'pendente' || task.status === 'separacao') && task.status !== 'CONCLUIDO' && task.status !== 'CANCELADA' ? `
                 <button class="btn btn-danger" onclick="cancelTask('${task.id}')">
                     ❌ Cancelar Tarefa
                 </button>

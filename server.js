@@ -1146,12 +1146,17 @@ app.post('/api/tasks/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'Nome do atendente é obrigatório' });
     }
 
-    // Verificar se o atendente que está cancelando é o mesmo que criou a tarefa
-    if (task.nomeAtendente !== nomeAtendente) {
+    // Atendentes podem cancelar suas próprias tarefas ou tarefas pendentes/em separação
+    const canCancel = task.nomeAtendente === nomeAtendente ||
+                      task.status === 'pendente' ||
+                      task.status === 'separacao';
+
+    if (!canCancel) {
       return res.status(403).json({
-        error: 'Você só pode cancelar tarefas criadas por você',
+        error: 'Você só pode cancelar tarefas criadas por você ou tarefas pendentes/em separação',
         criador: task.nomeAtendente,
-        solicitante: nomeAtendente
+        solicitante: nomeAtendente,
+        status: task.status
       });
     }
 
